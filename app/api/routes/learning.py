@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Query
 
+from app.integrations.anki import AnkiDailyStats
 from app.models.learning import LearningPulse, LearningSession, LearningSessionCreate
 from app.services.learning import LearningService
 from app.services.notion_sync import NotionSyncService
@@ -22,8 +23,12 @@ async def get_today_learning_pulse() -> LearningPulse:
     return await LearningService().build_today_pulse()
 
 
+@router.post("/import/anki/today", response_model=AnkiDailyStats)
+async def import_today_anki_reviews() -> AnkiDailyStats:
+    return await LearningService().import_anki_today()
+
+
 @router.post("/pulse/today/sync-notion")
 async def sync_today_learning_pulse_to_notion() -> dict[str, str]:
     pulse = await LearningService().build_today_pulse()
     return await NotionSyncService().sync_learning_pulse(pulse)
-

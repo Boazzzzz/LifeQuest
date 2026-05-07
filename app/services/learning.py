@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 
-from app.integrations.anki import AnkiAdapter
+from app.integrations.anki import AnkiAdapter, AnkiDailyStats
 from app.integrations.github import GitHubAdapter
 from app.models.activity import ActivityEvent, ActivityEventType
 from app.models.learning import LearningPulse, LearningSession, LearningSessionCreate, LearningSubject
@@ -61,10 +61,26 @@ class LearningService:
     async def build_today_pulse(self) -> LearningPulse:
         return await self.build_pulse(date.today())
 
+    async def import_anki_today(self) -> AnkiDailyStats:
+        stats = await self.anki_adapter.get_daily_stats(date.today())
+        if stats.connected:
+            self.activity_repository.create_event(
+                ActivityEvent(
+                    event_type=ActivityEventType.anki_reviews_imported,
+                    subject=LearningSubject.japanese,
+                    source="anki",
+                    payload=stats.model_dump(mode="json"),
+                )
+            )
+        return stats
+
     async def build_pulse(self, target_date: date) -> LearningPulse:
         sessions = self.learning_repository.list_sessions_for_date(target_date)
         anki_stats = await self.anki_adapter.get_daily_stats(target_date)
         github_stats = await self.github_adapter.get_daily_python_activity(target_date)
+        integration_warnings = []
+        if anki_stats.error:
+            integration_warnings.append(f"Anki: {anki_stats.error}")
 
         python_minutes = sum(
             session.duration_minutes for session in sessions if session.subject == LearningSubject.python
@@ -88,10 +104,12 @@ class LearningService:
             session_count=len(sessions),
             anki_reviews=anki_stats.reviews,
             anki_accuracy=anki_stats.accuracy,
+            anki_difficult_cards=anki_stats.difficult_cards,
             github_commits=github_stats.commits,
             focus_score=focus_score,
             summary=self._build_summary(python_minutes, japanese_minutes, anki_stats.reviews, github_stats.commits),
             tomorrow_priority=self._build_tomorrow_priority(python_minutes, japanese_minutes),
+            integration_warnings=integration_warnings,
         )
 
     def _calculate_focus_score(
@@ -128,4 +146,3 @@ class LearningService:
         if japanese_minutes < python_minutes:
             return "Prioritize Anki reviews and one N3 grammar block."
         return "Keep balance: one Python exercise and one Japanese review block."
-

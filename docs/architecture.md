@@ -69,7 +69,8 @@ Adapters should be optional, mock-friendly, and replaceable.
 
 - Manual learning sessions.
 - Daily pulse for Python and Japanese.
-- Optional Anki/GitHub pull interfaces.
+- AnkiConnect status, daily review import, accuracy estimate, and difficult-card capture.
+- Optional GitHub pull interface.
 - Optional Notion daily pulse sync.
 
 ### Phase 2: Automation Observability
@@ -94,4 +95,3 @@ Adapters should be optional, mock-friendly, and replaceable.
 
 - Use LifeQuest API as the backend.
 - Add quests, streaks, experience, focus score, and daily review loops.
-

@@ -13,6 +13,9 @@ class Settings(BaseSettings):
 
     anki_enabled: bool = False
     anki_connect_url: str = "http://127.0.0.1:8765"
+    anki_api_version: int = 6
+    anki_timeout_seconds: float = 5.0
+    anki_decks: str = ""
 
     github_enabled: bool = False
     github_token: str | None = None
@@ -31,4 +34,3 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
-
