@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 
 from app.integrations.anki import AnkiAdapter, AnkiDailyStats
-from app.integrations.github import GitHubAdapter
+from app.integrations.github import GitHubAdapter, GitHubDailyPythonActivity
 from app.models.activity import ActivityEvent, ActivityEventType
 from app.models.learning import LearningPulse, LearningSession, LearningSessionCreate, LearningSubject
 from app.repositories.activity import ActivityRepository
@@ -74,6 +74,19 @@ class LearningService:
             )
         return stats
 
+    async def import_github_today(self) -> GitHubDailyPythonActivity:
+        activity = await self.github_adapter.get_daily_python_activity(date.today())
+        if activity.connected:
+            self.activity_repository.create_event(
+                ActivityEvent(
+                    event_type=ActivityEventType.github_commits_imported,
+                    subject=LearningSubject.python,
+                    source="github",
+                    payload=activity.model_dump(mode="json"),
+                )
+            )
+        return activity
+
     async def build_pulse(self, target_date: date) -> LearningPulse:
         sessions = self.learning_repository.list_sessions_for_date(target_date)
         anki_stats = await self.anki_adapter.get_daily_stats(target_date)
@@ -81,6 +94,8 @@ class LearningService:
         integration_warnings = []
         if anki_stats.error:
             integration_warnings.append(f"Anki: {anki_stats.error}")
+        if github_stats.error:
+            integration_warnings.append(f"GitHub: {github_stats.error}")
 
         python_minutes = sum(
             session.duration_minutes for session in sessions if session.subject == LearningSubject.python
@@ -93,7 +108,7 @@ class LearningService:
             python_minutes=python_minutes,
             japanese_minutes=japanese_minutes,
             anki_reviews=anki_stats.reviews,
-            github_commits=github_stats.commits,
+            github_commits=github_stats.python_commits,
         )
 
         return LearningPulse(
@@ -106,8 +121,16 @@ class LearningService:
             anki_accuracy=anki_stats.accuracy,
             anki_difficult_cards=anki_stats.difficult_cards,
             github_commits=github_stats.commits,
+            github_python_commits=github_stats.python_commits,
+            github_repositories=github_stats.repositories,
+            github_python_files=github_stats.python_files,
             focus_score=focus_score,
-            summary=self._build_summary(python_minutes, japanese_minutes, anki_stats.reviews, github_stats.commits),
+            summary=self._build_summary(
+                python_minutes,
+                japanese_minutes,
+                anki_stats.reviews,
+                github_stats.python_commits,
+            ),
             tomorrow_priority=self._build_tomorrow_priority(python_minutes, japanese_minutes),
             integration_warnings=integration_warnings,
         )

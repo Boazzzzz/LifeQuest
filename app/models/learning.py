@@ -64,6 +64,9 @@ class LearningPulse(BaseModel):
     anki_accuracy: float | None = None
     anki_difficult_cards: list[str] = Field(default_factory=list)
     github_commits: int = 0
+    github_python_commits: int = 0
+    github_repositories: list[str] = Field(default_factory=list)
+    github_python_files: list[str] = Field(default_factory=list)
     focus_score: int = Field(default=0, ge=0, le=100)
     summary: str
     tomorrow_priority: str

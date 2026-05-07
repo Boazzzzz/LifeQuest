@@ -70,8 +70,9 @@ Adapters should be optional, mock-friendly, and replaceable.
 - Manual learning sessions.
 - Daily pulse for Python and Japanese.
 - AnkiConnect status, daily review import, accuracy estimate, and difficult-card capture.
-- Optional GitHub pull interface.
-- Optional Notion daily pulse sync.
+- GitHub status, daily push activity import, and Python commit detection.
+- Notion daily pulse upsert by date.
+- CLI quick capture for low-friction manual logging.
 
 ### Phase 2: Automation Observability
 

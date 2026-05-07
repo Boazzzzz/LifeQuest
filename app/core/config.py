@@ -20,10 +20,15 @@ class Settings(BaseSettings):
     github_enabled: bool = False
     github_token: str | None = None
     github_username: str | None = None
+    github_api_version: str = "2022-11-28"
+    github_timeout_seconds: float = 10.0
 
     notion_enabled: bool = False
     notion_token: str | None = None
+    notion_learning_pulse_data_source_id: str | None = Field(default=None)
     notion_learning_pulse_database_id: str | None = Field(default=None)
+    notion_api_version: str | None = None
+    notion_timeout_seconds: float = 20.0
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
