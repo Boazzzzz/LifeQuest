@@ -12,7 +12,6 @@ from app.models.automation import (
     AutomationRunStatus,
     AutomationTriggerSource,
 )
-from app.models.japanese import JapaneseVerbFormCreate, JapaneseVerbGroup, JLPTLevel
 from app.models.learning import LearningSessionCreate, LearningSubject
 from app.models.work_knowledge import (
     WorkKnowledgeCategory,
@@ -21,7 +20,6 @@ from app.models.work_knowledge import (
     WorkKnowledgeSource,
 )
 from app.services.automation import AutomationConflictError, AutomationNotFoundError, AutomationService
-from app.services.japanese import JapaneseService, JapaneseVerbConjugationError, JapaneseVerbFormNotFoundError
 from app.services.learning import LearningService
 from app.services.notion_schema import NotionSchemaService
 from app.services.notion_sync import NotionSyncService
@@ -51,8 +49,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _work_command(args)
     if args.command == "notion":
         return _notion_command(args)
-    if args.command == "japanese":
-        return _japanese_command(args)
 
     parser.print_help()
     return 1
@@ -79,7 +75,6 @@ def build_parser() -> argparse.ArgumentParser:
     add_automation_parser(subparsers)
     add_work_parser(subparsers)
     add_notion_parser(subparsers)
-    add_japanese_parser(subparsers)
 
     return parser
 
@@ -166,38 +161,6 @@ def add_notion_parser(subparsers: argparse._SubParsersAction) -> None:
 
     bootstrap_parser = notion_subparsers.add_parser("bootstrap", help="Create or repair Notion schema.")
     bootstrap_parser.add_argument("schema", nargs="?", default="all")
-
-
-def add_japanese_parser(subparsers: argparse._SubParsersAction) -> None:
-    japanese_parser = subparsers.add_parser("japanese", help="Manage Japanese learning tables.")
-    japanese_subparsers = japanese_parser.add_subparsers(dest="japanese_command", required=True)
-
-    verb_parser = japanese_subparsers.add_parser("verb", help="Manage Japanese verb form table.")
-    verb_subparsers = verb_parser.add_subparsers(dest="verb_command", required=True)
-
-    add_parser = verb_subparsers.add_parser("add", help="Add one verb and generate core formality/tense forms.")
-    add_parser.add_argument("dictionary_form")
-    add_parser.add_argument("--group", choices=[group.value for group in JapaneseVerbGroup], required=True)
-    add_parser.add_argument("--reading")
-    add_parser.add_argument("--meaning")
-    add_parser.add_argument("--jlpt", choices=[level.value for level in JLPTLevel], default=JLPTLevel.unknown.value)
-    add_parser.add_argument("--confidence", type=int, choices=range(1, 6))
-    add_parser.add_argument("--plain-nonpast")
-    add_parser.add_argument("--polite-nonpast")
-    add_parser.add_argument("--plain-past")
-    add_parser.add_argument("--polite-past")
-    add_parser.add_argument("--plain-negative")
-    add_parser.add_argument("--polite-negative")
-    add_parser.add_argument("--plain-negative-past")
-    add_parser.add_argument("--polite-negative-past")
-    add_parser.add_argument("--notes")
-    add_parser.add_argument("--tag", action="append", default=[])
-
-    list_parser = verb_subparsers.add_parser("list", help="List Japanese verb form rows.")
-    list_parser.add_argument("--limit", type=int, default=50)
-
-    verb_subparsers.add_parser("seed", help="Seed a few sample verb rows.")
-    verb_subparsers.add_parser("sync-notion", help="Sync Japanese verb forms to Notion.")
 
 
 def _log_learning_session(args: argparse.Namespace) -> int:
@@ -472,80 +435,6 @@ async def _notion_bootstrap(service: NotionSchemaService, schema: str) -> int:
         for step in result.next_steps:
             print(f"  next: {step}")
     return 0
-
-
-def _japanese_command(args: argparse.Namespace) -> int:
-    if args.japanese_command == "verb":
-        return _japanese_verb_command(args)
-    return 1
-
-
-def _japanese_verb_command(args: argparse.Namespace) -> int:
-    service = JapaneseService()
-    try:
-        if args.verb_command == "add":
-            return _japanese_verb_add(service, args)
-        if args.verb_command == "list":
-            return _japanese_verb_list(service, args.limit)
-        if args.verb_command == "seed":
-            return _japanese_verb_seed(service)
-        if args.verb_command == "sync-notion":
-            return asyncio.run(_japanese_verb_sync_notion(service))
-    except (JapaneseVerbConjugationError, JapaneseVerbFormNotFoundError) as error:
-        print(str(error))
-        return 1
-    return 1
-
-
-def _japanese_verb_add(service: JapaneseService, args: argparse.Namespace) -> int:
-    verb_form = service.create_verb_form(
-        JapaneseVerbFormCreate(
-            dictionary_form=args.dictionary_form,
-            reading=args.reading,
-            meaning=args.meaning,
-            verb_group=args.group,
-            jlpt_level=args.jlpt,
-            confidence=args.confidence,
-            plain_nonpast=args.plain_nonpast,
-            polite_nonpast=args.polite_nonpast,
-            plain_past=args.plain_past,
-            polite_past=args.polite_past,
-            plain_negative=args.plain_negative,
-            polite_negative=args.polite_negative,
-            plain_negative_past=args.plain_negative_past,
-            polite_negative_past=args.polite_negative_past,
-            notes=args.notes,
-            tags=args.tag,
-        )
-    )
-    print(f"Added verb {verb_form.dictionary_form}: {verb_form.plain_nonpast} / {verb_form.polite_nonpast}")
-    return 0
-
-
-def _japanese_verb_list(service: JapaneseService, limit: int) -> int:
-    verb_forms = service.list_verb_forms(limit=limit)
-    if not verb_forms:
-        print("No Japanese verb forms recorded yet.")
-        return 0
-    for verb_form in verb_forms:
-        print(
-            f"{verb_form.dictionary_form} [{verb_form.verb_group.value}] "
-            f"plain={verb_form.plain_nonpast}/{verb_form.plain_past} "
-            f"polite={verb_form.polite_nonpast}/{verb_form.polite_past}"
-        )
-    return 0
-
-
-def _japanese_verb_seed(service: JapaneseService) -> int:
-    verb_forms = service.seed_basic_verb_forms()
-    print(f"Seeded {len(verb_forms)} Japanese verb form rows.")
-    return 0
-
-
-async def _japanese_verb_sync_notion(service: JapaneseService) -> int:
-    result = await NotionSyncService().sync_japanese_verb_forms(service.list_verb_forms(limit=500))
-    print(f"Japanese verb forms Notion sync: {result}")
-    return 0 if result.get("status") in {"synced", "partial", "skipped"} else 1
 
 
 def parse_datetime(value: str) -> datetime:

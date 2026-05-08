@@ -11,8 +11,8 @@ LifeQuest should reduce administrative overhead and protect focus time. It shoul
 Core principles:
 
 - Do not reinvent the wheel. LifeQuest should orchestrate mature tools instead of replacing them.
-- SQLite is the local source of truth for MVP metadata and learning history.
-- Notion is a dashboard, not the canonical database.
+- SQLite is the local source of truth for LifeQuest-owned metadata and learning history.
+- Notion is the workspace for human-maintained content and the dashboard for generated summaries.
 - External integrations must be optional and mock-friendly.
 - Existing automation projects should be integrated through adapters before being rewritten.
 - Risky automations, especially file moves and media cleanup, should start in dry-run mode.
@@ -42,7 +42,7 @@ Implemented:
 - Notion Learning Pulse sync with upsert by date.
 - Automation registry and run ledger for existing external scripts/projects.
 - Work Knowledge manual capture and Notion sync for sanitized system-engineer notes.
-- Japanese verb formality/tense table for verbs you are actively learning.
+- Notion schema/bootstrap support for a Japanese verb formality/tense reference table.
 - CLI quick capture through `lifequest`.
 - FastAPI routes for local API testing.
 
@@ -219,11 +219,6 @@ The app uses `data/lifequest.db` by default. The database is ignored by git. Eac
 - `GET /work-knowledge`
 - `GET /work-knowledge/{note_id}`
 - `POST /work-knowledge/sync-notion`
-- `POST /japanese/verbs`
-- `GET /japanese/verbs`
-- `GET /japanese/verbs/{verb_form_id}`
-- `POST /japanese/verbs/seed`
-- `POST /japanese/verbs/sync-notion`
 
 ## Environment Variables
 
@@ -283,9 +278,7 @@ lifequest work sync-notion
 lifequest notion schemas
 lifequest notion check all
 lifequest notion bootstrap learning-pulse
-lifequest japanese verb add 食べる --group ichidan --reading たべる --meaning "eat" --jlpt N5 --confidence 3
-lifequest japanese verb list
-lifequest japanese verb sync-notion
+lifequest notion bootstrap japanese-verb-forms
 ```
 
 The module form also works:
@@ -385,11 +378,25 @@ Safety boundary:
 
 ## Japanese Verb Forms
 
-This table is intentionally small: one verb per row, focused only on formality and tense/polarity.
+This table is intentionally Notion-native: one verb per row, focused only on formality and tense/polarity. LifeQuest only creates/checks the database structure; the actual rows live in Notion and should be edited there.
 
-Tracked forms:
+Create or repair the Notion table:
+
+```bash
+lifequest notion bootstrap japanese-verb-forms
+lifequest notion check japanese-verb-forms
+```
+
+Recommended columns:
 
 ```text
+Name
+Dictionary Form
+Reading
+Meaning
+Verb Group
+JLPT
+Confidence
 Plain Nonpast
 Polite Nonpast
 Plain Past
@@ -398,31 +405,17 @@ Plain Negative
 Polite Negative
 Plain Negative Past
 Polite Negative Past
+Notes
+Tags
+Updated At
 ```
 
-Example:
+Useful Notion views:
 
-```bash
-lifequest japanese verb add 食べる \
-  --group ichidan \
-  --reading たべる \
-  --meaning "eat" \
-  --jlpt N5 \
-  --confidence 3 \
-  --tag verb
-
-lifequest japanese verb list
-lifequest japanese verb sync-notion
-```
-
-Supported auto-generation:
-
-- `ichidan`
-- `godan`
-- `suru`
-- `kuru`
-
-Use `irregular` only when you provide the forms manually.
+- By JLPT level.
+- Low confidence first.
+- Missing form cells.
+- Recently updated.
 
 ## AnkiConnect
 

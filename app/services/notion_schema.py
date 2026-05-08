@@ -166,7 +166,6 @@ NOTION_SCHEMAS: dict[str, NotionDatabaseSchema] = {
         database_setting="notion_japanese_verb_forms_database_id",
         properties={
             "Name": title_prop(),
-            "LifeQuest ID": text_prop(),
             "Dictionary Form": text_prop(),
             "Reading": text_prop(),
             "Meaning": text_prop(),

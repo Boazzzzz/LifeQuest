@@ -4,8 +4,8 @@ LifeQuest uses Notion as a dashboard and workspace layer. LifeQuest should not r
 
 ## Global Rules
 
-- Notion is the human-facing dashboard.
-- SQLite remains the MVP source of truth for generated metadata and automation history.
+- Notion is the human-facing dashboard and workspace for Notion-native learning/reference tables.
+- SQLite remains the MVP source of truth for LifeQuest-owned generated metadata and automation history.
 - LifeQuest should upsert stable machine-generated records instead of creating duplicates.
 - Notion-only notes can stay in Notion.
 - Company-sensitive content must be sanitized before entering personal Notion.
@@ -201,59 +201,43 @@ Sensitivity: personal
 
 Purpose:
 
-Focused table for verbs whose formality and tense/polarity forms need review.
+Focused Notion-native table for verbs whose formality and tense/polarity forms need review.
 
-LifeQuest model:
+Ownership:
 
 ```text
-JapaneseVerbForm
-- dictionary_form
-- reading
-- meaning
-- verb_group
-- jlpt_level
-- confidence
-- plain_nonpast
-- polite_nonpast
-- plain_past
-- polite_past
-- plain_negative
-- polite_negative
-- plain_negative_past
-- polite_negative_past
-- notes
-- tags
+Notion is the source of truth for rows.
+LifeQuest only creates/checks the database schema.
 ```
 
 Recommended properties:
 
 | Notion Property | Type | Source | LifeQuest Field | Notes |
 | --- | --- | --- | --- | --- |
-| Name | title | LifeQuest | generated | `{dictionary_form} - 文体/時制`. |
-| LifeQuest ID | rich text | LifeQuest | `id` | Stable upsert key. |
-| Dictionary Form | rich text | Shared | `dictionary_form` | 辞書形. |
-| Reading | rich text | Shared | `reading` | Optional reading. |
-| Meaning | rich text | Shared | `meaning` | Short meaning in English/Chinese. |
-| Verb Group | select | Shared | `verb_group` | `ichidan`, `godan`, `suru`, `kuru`, `irregular`. |
-| JLPT | select | Shared | `jlpt_level` | `N5`, `N4`, `N3`, `N2`, `N1`, `unknown`. |
-| Confidence | number | Shared | `confidence` | 1-5 self-rating. |
-| Plain Nonpast | rich text | LifeQuest | `plain_nonpast` | 普通形・非過去・肯定. |
-| Polite Nonpast | rich text | LifeQuest | `polite_nonpast` | 丁寧形・非過去・肯定. |
-| Plain Past | rich text | LifeQuest | `plain_past` | 普通形・過去・肯定. |
-| Polite Past | rich text | LifeQuest | `polite_past` | 丁寧形・過去・肯定. |
-| Plain Negative | rich text | LifeQuest | `plain_negative` | 普通形・非過去・否定. |
-| Polite Negative | rich text | LifeQuest | `polite_negative` | 丁寧形・非過去・否定. |
-| Plain Negative Past | rich text | LifeQuest | `plain_negative_past` | 普通形・過去・否定. |
-| Polite Negative Past | rich text | LifeQuest | `polite_negative_past` | 丁寧形・過去・否定. |
-| Notes | rich text | Shared | `notes` | Mistake reason or nuance. |
-| Tags | multi-select | Shared | `tags` | Grouping. |
-| Updated At | date | LifeQuest | `updated_at` | Last update timestamp. |
+| Name | title | Notion | none | Display title, usually the dictionary form. |
+| Dictionary Form | rich text | Notion | none | 辞書形. |
+| Reading | rich text | Notion | none | Optional reading. |
+| Meaning | rich text | Notion | none | Short meaning in English/Chinese. |
+| Verb Group | select | Notion | none | `ichidan`, `godan`, `suru`, `kuru`, `irregular`. |
+| JLPT | select | Notion | none | `N5`, `N4`, `N3`, `N2`, `N1`, `unknown`. |
+| Confidence | number | Notion | none | 1-5 self-rating. |
+| Plain Nonpast | rich text | Notion | none | 普通形・非過去・肯定. |
+| Polite Nonpast | rich text | Notion | none | 丁寧形・非過去・肯定. |
+| Plain Past | rich text | Notion | none | 普通形・過去・肯定. |
+| Polite Past | rich text | Notion | none | 丁寧形・過去・肯定. |
+| Plain Negative | rich text | Notion | none | 普通形・非過去・否定. |
+| Polite Negative | rich text | Notion | none | 丁寧形・非過去・否定. |
+| Plain Negative Past | rich text | Notion | none | 普通形・過去・否定. |
+| Polite Negative Past | rich text | Notion | none | 丁寧形・過去・否定. |
+| Notes | rich text | Notion | none | Mistake reason or nuance. |
+| Tags | multi-select | Notion | none | Grouping. |
+| Updated At | date | Notion | none | Optional manual update timestamp. |
 
-Sync behavior:
+Lifecycle:
 
-- Upsert by `LifeQuest ID`.
-- Auto-generates common forms for `ichidan`, `godan`, `suru`, and `kuru`.
-- `irregular` rows should provide forms manually.
+- Use `lifequest notion bootstrap japanese-verb-forms` to create or repair columns.
+- Fill and review verb rows directly in Notion.
+- Add local LifeQuest sync later only if there is a clear automation value.
 
 ## 5. LifeQuest - Inbox
 
@@ -329,11 +313,10 @@ Future sync behavior:
 
 ### Step 4: Japanese Verb Forms
 
-- Add `JapaneseVerbForm` model, table, repository, service, API, and CLI.
-- Start with verb formality/tense table only.
-- Add Notion sync.
+- Keep this as a Notion-native table.
+- LifeQuest only owns schema check/bootstrap for now.
 - Use `NOTION_JAPANESE_VERB_FORMS_DATA_SOURCE_ID` or `NOTION_JAPANESE_VERB_FORMS_DATABASE_ID`.
-- Use `lifequest notion check japanese-verb-forms` before syncing.
+- Use `lifequest notion check japanese-verb-forms` after Notion changes.
 
 ### Step 5: Inbox
 

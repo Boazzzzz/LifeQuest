@@ -1,7 +1,6 @@
 from datetime import date
 
 from app.models.automation import AutomationCategory, AutomationDefinition, AutomationRunStatus
-from app.models.japanese import JapaneseVerbForm, JapaneseVerbGroup, JLPTLevel
 from app.models.learning import LearningPulse
 from app.models.work_knowledge import (
     WorkKnowledgeCategory,
@@ -136,50 +135,3 @@ def test_work_knowledge_notion_properties_match_schema():
     assert properties["Category"] == {"select": {"name": "nginx"}}
     assert properties["Sensitivity"] == {"select": {"name": "personal"}}
 
-
-def test_japanese_verb_form_notion_properties_match_schema():
-    verb_form = JapaneseVerbForm(
-        id="verb-1",
-        dictionary_form="食べる",
-        reading="たべる",
-        meaning="eat",
-        verb_group=JapaneseVerbGroup.ichidan,
-        jlpt_level=JLPTLevel.n5,
-        confidence=3,
-        plain_nonpast="食べる",
-        polite_nonpast="食べます",
-        plain_past="食べた",
-        polite_past="食べました",
-        plain_negative="食べない",
-        polite_negative="食べません",
-        plain_negative_past="食べなかった",
-        polite_negative_past="食べませんでした",
-        tags=["verb"],
-    )
-
-    properties = NotionSyncService()._build_japanese_verb_form_properties(verb_form)
-
-    assert set(properties) == {
-        "Name",
-        "LifeQuest ID",
-        "Dictionary Form",
-        "Reading",
-        "Meaning",
-        "Verb Group",
-        "JLPT",
-        "Confidence",
-        "Plain Nonpast",
-        "Polite Nonpast",
-        "Plain Past",
-        "Polite Past",
-        "Plain Negative",
-        "Polite Negative",
-        "Plain Negative Past",
-        "Polite Negative Past",
-        "Notes",
-        "Tags",
-        "Updated At",
-    }
-    assert properties["LifeQuest ID"] == {"rich_text": [{"text": {"content": "verb-1"}}]}
-    assert properties["Verb Group"] == {"select": {"name": "ichidan"}}
-    assert properties["Plain Past"] == {"rich_text": [{"text": {"content": "食べた"}}]}
