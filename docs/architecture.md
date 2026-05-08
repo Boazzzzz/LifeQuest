@@ -78,6 +78,7 @@ Adapters should be optional, mock-friendly, and replaceable.
 
 - Automation registry.
 - Run ledger.
+- API and CLI for manual registration and run logging.
 - Adapters for existing Raindrop, Telegram, Stash, and game script projects.
 
 ### Phase 3: Knowledge Inbox

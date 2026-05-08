@@ -35,6 +35,54 @@ CREATE TABLE IF NOT EXISTS activity_events (
     payload TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS automation_definitions (
+    id TEXT PRIMARY KEY,
+    key TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    external_project_path TEXT,
+    command_hint TEXT,
+    schedule_hint TEXT,
+    log_path TEXT,
+    owner TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    notes TEXT,
+    tags TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_definitions_key
+ON automation_definitions(key);
+
+CREATE INDEX IF NOT EXISTS idx_automation_definitions_category
+ON automation_definitions(category);
+
+CREATE INDEX IF NOT EXISTS idx_automation_definitions_enabled
+ON automation_definitions(enabled);
+
+CREATE TABLE IF NOT EXISTS automation_runs (
+    id TEXT PRIMARY KEY,
+    automation_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL,
+    trigger_source TEXT NOT NULL,
+    items_processed INTEGER NOT NULL DEFAULT 0,
+    summary TEXT,
+    error_message TEXT,
+    external_run_id TEXT,
+    log_excerpt TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (automation_id) REFERENCES automation_definitions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_runs_automation_started
+ON automation_runs(automation_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_automation_runs_status
+ON automation_runs(status);
 """
 
 
@@ -53,4 +101,3 @@ def connect() -> Iterator[sqlite3.Connection]:
         connection.commit()
     finally:
         connection.close()
-

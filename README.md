@@ -25,12 +25,12 @@ Implemented:
 - AnkiConnect status, daily review import, accuracy estimate, and difficult-card capture.
 - GitHub status, recent push activity import, and Python commit detection.
 - Notion Learning Pulse sync with upsert by date.
+- Automation registry and run ledger for existing external scripts/projects.
 - CLI quick capture through `lifequest`.
 - FastAPI routes for local API testing.
 
 Not implemented yet:
 
-- Automation registry and run ledger for existing scripts.
 - Raindrop, Telegram queue, Stash, and mobile game script adapters.
 - Knowledge inbox.
 - ACG media library scanner.
@@ -123,11 +123,18 @@ Status: mostly implemented.
 
 ### Phase 2: Automation Observability
 
+Status: MVP implemented.
+
 - `AutomationDefinition` registry.
 - `AutomationRun` ledger.
+- API and CLI for manual registration and run logging.
+- Last-run status and summary on automation lists.
+
+Still pending:
+
 - Adapters for existing Raindrop classifier, Telegram downloader, Stash sync, and mobile game script projects.
-- Manual trigger endpoints.
-- Last-run status and error summaries.
+- Manual trigger endpoints for trusted scripts.
+- Log file readers and status importers.
 
 ### Phase 3: Knowledge Inbox
 
@@ -179,6 +186,13 @@ The app uses `data/lifequest.db` by default. The database is ignored by git. Eac
 - `POST /learning/import/anki/today`
 - `POST /learning/import/github/today`
 - `POST /learning/pulse/today/sync-notion`
+- `POST /automations`
+- `GET /automations`
+- `GET /automations/{automation_ref}`
+- `PATCH /automations/{automation_ref}`
+- `POST /automations/{automation_ref}/runs`
+- `GET /automations/{automation_ref}/runs`
+- `GET /automations/runs/recent`
 
 ## Environment Variables
 
@@ -221,6 +235,7 @@ lifequest pulse
 lifequest import-anki
 lifequest import-github
 lifequest sync-notion
+lifequest automation list
 ```
 
 The module form also works:
@@ -228,6 +243,66 @@ The module form also works:
 ```bash
 python3 -m app.cli log python 25 "Small automation practice"
 ```
+
+## Automation Registry + Run Ledger
+
+LifeQuest tracks existing external automation projects without rewriting them.
+
+Use `AutomationDefinition` for the registry:
+
+```text
+key
+name
+category
+external_project_path
+command_hint
+schedule_hint
+log_path
+owner
+enabled
+notes
+tags
+```
+
+Use `AutomationRun` for execution history:
+
+```text
+automation_id
+started_at
+finished_at
+status
+trigger_source
+items_processed
+summary
+error_message
+external_run_id
+log_excerpt
+```
+
+Example CLI workflow:
+
+```bash
+lifequest automation register raindrop-classifier "Raindrop Unsorted Classifier" \
+  --category knowledge \
+  --project-path "/path/to/raindrop-project" \
+  --schedule-hint "daily" \
+  --tag raindrop
+
+lifequest automation log-run raindrop-classifier \
+  --status success \
+  --items-processed 42 \
+  --summary "Tagged unsorted bookmarks by source domain"
+
+lifequest automation list
+lifequest automation runs raindrop-classifier
+lifequest automation recent
+```
+
+Current design boundary:
+
+- LifeQuest records and observes existing automations.
+- Existing scripts remain the source of their own behavior.
+- Direct trigger/control should be added later through adapters after each script is trusted.
 
 ## AnkiConnect
 
