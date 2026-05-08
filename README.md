@@ -348,6 +348,8 @@ LifeQuest syncs one Notion row per date. It queries by the `Date` property first
 
 Current Notion API setups can use `NOTION_LEARNING_PULSE_DATA_SOURCE_ID`. Older database-based setups can use `NOTION_LEARNING_PULSE_DATABASE_ID`.
 
+The full Notion database plan and sync mapping lives in [docs/notion_schema.md](docs/notion_schema.md).
+
 Recommended properties:
 
 ```text
