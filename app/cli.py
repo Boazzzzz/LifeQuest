@@ -13,9 +13,16 @@ from app.models.automation import (
     AutomationTriggerSource,
 )
 from app.models.learning import LearningSessionCreate, LearningSubject
+from app.models.work_knowledge import (
+    WorkKnowledgeCategory,
+    WorkKnowledgeNoteCreate,
+    WorkKnowledgeSensitivity,
+    WorkKnowledgeSource,
+)
 from app.services.automation import AutomationConflictError, AutomationNotFoundError, AutomationService
 from app.services.learning import LearningService
 from app.services.notion_sync import NotionSyncService
+from app.services.work_knowledge import WorkKnowledgeNotFoundError, WorkKnowledgeService
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -37,6 +44,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return asyncio.run(_sync_notion_today())
     if args.command == "automation":
         return _automation_command(args)
+    if args.command == "work":
+        return _work_command(args)
 
     parser.print_help()
     return 1
@@ -61,6 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("import-github", help="Import today's GitHub Python activity.")
     subparsers.add_parser("sync-notion", help="Sync today's learning pulse to Notion.")
     add_automation_parser(subparsers)
+    add_work_parser(subparsers)
 
     return parser
 
@@ -108,6 +118,32 @@ def add_automation_parser(subparsers: argparse._SubParsersAction) -> None:
     log_run_parser.add_argument("--log-excerpt")
     log_run_parser.add_argument("--started-at", type=parse_datetime)
     log_run_parser.add_argument("--finished-at", type=parse_datetime)
+
+
+def add_work_parser(subparsers: argparse._SubParsersAction) -> None:
+    work_parser = subparsers.add_parser("work", help="Capture sanitized work knowledge.")
+    work_subparsers = work_parser.add_subparsers(dest="work_command", required=True)
+
+    capture_parser = work_subparsers.add_parser("capture", help="Capture one sanitized work knowledge note.")
+    capture_parser.add_argument("title", nargs="+")
+    capture_parser.add_argument("--category", choices=[category.value for category in WorkKnowledgeCategory], default="other")
+    capture_parser.add_argument("--summary", required=True)
+    capture_parser.add_argument("--command", dest="commands", action="append", default=[])
+    capture_parser.add_argument("--concept", action="append", default=[])
+    capture_parser.add_argument("--source", choices=[source.value for source in WorkKnowledgeSource], default="manual")
+    capture_parser.add_argument(
+        "--sensitivity",
+        choices=[sensitivity.value for sensitivity in WorkKnowledgeSensitivity],
+        default="personal",
+    )
+    capture_parser.add_argument("--system", action="append", default=[])
+    capture_parser.add_argument("--follow-up")
+    capture_parser.add_argument("--tag", action="append", default=[])
+
+    list_parser = work_subparsers.add_parser("list", help="List recent work knowledge notes.")
+    list_parser.add_argument("--limit", type=int, default=20)
+
+    work_subparsers.add_parser("sync-notion", help="Sync work knowledge notes to Notion.")
 
 
 def _log_learning_session(args: argparse.Namespace) -> int:
@@ -280,6 +316,56 @@ def _format_automation_run(run) -> str:
         f"items={run.items_processed} "
         f"automation_id={run.automation_id}{summary}"
     )
+
+
+def _work_command(args: argparse.Namespace) -> int:
+    service = WorkKnowledgeService()
+    try:
+        if args.work_command == "capture":
+            return _work_capture(service, args)
+        if args.work_command == "list":
+            return _work_list(service, args.limit)
+        if args.work_command == "sync-notion":
+            return asyncio.run(_work_sync_notion(service))
+    except WorkKnowledgeNotFoundError as error:
+        print(str(error))
+        return 1
+    return 1
+
+
+def _work_capture(service: WorkKnowledgeService, args: argparse.Namespace) -> int:
+    note = service.create_note(
+        WorkKnowledgeNoteCreate(
+            title=" ".join(args.title),
+            category=args.category,
+            sanitized_summary=args.summary,
+            commands=args.commands,
+            concepts=args.concept,
+            source=args.source,
+            sensitivity=args.sensitivity,
+            systems=args.system,
+            follow_up=args.follow_up,
+            tags=args.tag,
+        )
+    )
+    print(f"Captured work knowledge {note.id}: {note.title}")
+    return 0
+
+
+def _work_list(service: WorkKnowledgeService, limit: int) -> int:
+    notes = service.list_notes(limit=limit)
+    if not notes:
+        print("No work knowledge notes captured yet.")
+        return 0
+    for note in notes:
+        print(f"{note.created_at.isoformat()} [{note.category.value}] {note.title}")
+    return 0
+
+
+async def _work_sync_notion(service: WorkKnowledgeService) -> int:
+    result = await NotionSyncService().sync_work_knowledge(service.list_notes(limit=500))
+    print(f"Work knowledge Notion sync: {result}")
+    return 0 if result.get("status") in {"synced", "partial", "skipped"} else 1
 
 
 def parse_datetime(value: str) -> datetime:

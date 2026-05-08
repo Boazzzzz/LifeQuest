@@ -41,6 +41,7 @@ Implemented:
 - GitHub status, recent push activity import, and Python commit detection.
 - Notion Learning Pulse sync with upsert by date.
 - Automation registry and run ledger for existing external scripts/projects.
+- Work Knowledge manual capture and Notion sync for sanitized system-engineer notes.
 - CLI quick capture through `lifequest`.
 - FastAPI routes for local API testing.
 
@@ -153,6 +154,10 @@ Still pending:
 
 ### Phase 3: Knowledge Inbox
 
+Work Knowledge capture is implemented as the first work-related knowledge layer.
+
+Still pending:
+
 - Unified `InboxItem` model for URLs, notes, AI summaries, and reading items.
 - Raindrop import and dead-link checks.
 - Notion knowledge sync.
@@ -209,6 +214,10 @@ The app uses `data/lifequest.db` by default. The database is ignored by git. Eac
 - `GET /automations/{automation_ref}/runs`
 - `GET /automations/runs/recent`
 - `POST /automations/sync-notion`
+- `POST /work-knowledge`
+- `GET /work-knowledge`
+- `GET /work-knowledge/{note_id}`
+- `POST /work-knowledge/sync-notion`
 
 ## Environment Variables
 
@@ -238,6 +247,8 @@ NOTION_LEARNING_PULSE_DATA_SOURCE_ID=
 NOTION_LEARNING_PULSE_DATABASE_ID=
 NOTION_AUTOMATIONS_DATA_SOURCE_ID=
 NOTION_AUTOMATIONS_DATABASE_ID=
+NOTION_WORK_KNOWLEDGE_DATA_SOURCE_ID=
+NOTION_WORK_KNOWLEDGE_DATABASE_ID=
 NOTION_API_VERSION=
 NOTION_TIMEOUT_SECONDS=20
 ```
@@ -255,6 +266,9 @@ lifequest import-github
 lifequest sync-notion
 lifequest automation list
 lifequest automation sync-notion
+lifequest work capture "Nginx 502 troubleshooting pattern" --category nginx --summary "A 502 often means the proxy cannot reach upstream." --command "systemctl status" --concept upstream
+lifequest work list
+lifequest work sync-notion
 ```
 
 The module form also works:
@@ -324,6 +338,33 @@ Current design boundary:
 - Existing scripts remain the source of their own behavior.
 - Direct trigger/control should be added later through adapters after each script is trusted.
 - Notion sync upserts by `Key` and writes registry fields plus latest run status.
+
+## Work Knowledge
+
+Work Knowledge is for sanitized system-engineer learning notes. It should capture reusable concepts and commands, not company data.
+
+Example:
+
+```bash
+lifequest work capture "Nginx 502 troubleshooting pattern" \
+  --category nginx \
+  --summary "A 502 often means the reverse proxy cannot reach the upstream service." \
+  --command "systemctl status" \
+  --command "journalctl -u <service>" \
+  --concept "reverse proxy" \
+  --concept "upstream health" \
+  --system linux \
+  --tag troubleshooting
+
+lifequest work list
+lifequest work sync-notion
+```
+
+Safety boundary:
+
+- Store generalized learning, not company records.
+- Do not store raw production logs, internal IPs, hostnames, tokens, customer names, ticket IDs, or full company Copilot transcripts.
+- Use `sensitivity` to mark whether a note is `public`, `personal`, `company_internal`, or `confidential`.
 
 ## AnkiConnect
 

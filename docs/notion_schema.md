@@ -165,6 +165,7 @@ Recommended properties:
 | Notion Property | Type | Source | LifeQuest Field | Notes |
 | --- | --- | --- | --- | --- |
 | Name | title | Shared | `title` | Human-readable note title. |
+| LifeQuest ID | rich text | LifeQuest | `id` | Stable upsert key. |
 | Category | select | Shared | `category` | `linux`, `networking`, `docker`, `nginx`, `database`, `security`, `monitoring`, `cloud`, `other`. |
 | Sanitized Summary | rich text | Shared | `sanitized_summary` | No confidential details. |
 | Commands | rich text | Shared | `commands` | Generic reusable commands only. |
@@ -260,6 +261,7 @@ Future sync behavior:
 - Add `WorkKnowledgeNote` model, table, repository, service, API, and CLI.
 - Start with manual capture only.
 - Add Notion sync after capture is stable.
+- Use `NOTION_WORK_KNOWLEDGE_DATA_SOURCE_ID` or `NOTION_WORK_KNOWLEDGE_DATABASE_ID`.
 
 ### Step 4: Inbox
 

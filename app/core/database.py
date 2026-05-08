@@ -83,6 +83,31 @@ ON automation_runs(automation_id, started_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_automation_runs_status
 ON automation_runs(status);
+
+CREATE TABLE IF NOT EXISTS work_knowledge_notes (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    sanitized_summary TEXT NOT NULL,
+    commands TEXT NOT NULL DEFAULT '[]',
+    concepts TEXT NOT NULL DEFAULT '[]',
+    source TEXT NOT NULL,
+    sensitivity TEXT NOT NULL,
+    systems TEXT NOT NULL DEFAULT '[]',
+    follow_up TEXT,
+    tags TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_work_knowledge_notes_category
+ON work_knowledge_notes(category);
+
+CREATE INDEX IF NOT EXISTS idx_work_knowledge_notes_source
+ON work_knowledge_notes(source);
+
+CREATE INDEX IF NOT EXISTS idx_work_knowledge_notes_created_at
+ON work_knowledge_notes(created_at);
 """
 
 

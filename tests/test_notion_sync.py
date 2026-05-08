@@ -2,6 +2,12 @@ from datetime import date
 
 from app.models.automation import AutomationCategory, AutomationDefinition, AutomationRunStatus
 from app.models.learning import LearningPulse
+from app.models.work_knowledge import (
+    WorkKnowledgeCategory,
+    WorkKnowledgeNote,
+    WorkKnowledgeSensitivity,
+    WorkKnowledgeSource,
+)
 from app.services.notion_sync import NotionSyncService
 
 
@@ -91,3 +97,40 @@ def test_automation_notion_properties_match_schema():
     assert properties["Category"] == {"select": {"name": "knowledge"}}
     assert properties["Enabled"] == {"checkbox": True}
     assert properties["Last Run Status"] == {"select": {"name": "success"}}
+
+
+def test_work_knowledge_notion_properties_match_schema():
+    note = WorkKnowledgeNote(
+        id="note-1",
+        title="Nginx 502 troubleshooting pattern",
+        category=WorkKnowledgeCategory.nginx,
+        sanitized_summary="A 502 often means the proxy cannot reach upstream.",
+        commands=["systemctl status", "journalctl -u service"],
+        concepts=["reverse proxy", "upstream health"],
+        source=WorkKnowledgeSource.manual,
+        sensitivity=WorkKnowledgeSensitivity.personal,
+        systems=["linux"],
+        follow_up="Review upstream health checks.",
+        tags=["troubleshooting"],
+    )
+
+    properties = NotionSyncService()._build_work_knowledge_properties(note)
+
+    assert set(properties) == {
+        "Name",
+        "LifeQuest ID",
+        "Category",
+        "Sanitized Summary",
+        "Commands",
+        "Concepts",
+        "Source",
+        "Sensitivity",
+        "Systems",
+        "Follow Up",
+        "Tags",
+        "Created At",
+        "Updated At",
+    }
+    assert properties["LifeQuest ID"] == {"rich_text": [{"text": {"content": "note-1"}}]}
+    assert properties["Category"] == {"select": {"name": "nginx"}}
+    assert properties["Sensitivity"] == {"select": {"name": "personal"}}
