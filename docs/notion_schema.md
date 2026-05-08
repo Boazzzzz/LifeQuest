@@ -247,6 +247,8 @@ Future sync behavior:
 - Keep current upsert by `Date`.
 - Verify Notion database properties match this document.
 - Add tests for property mapping if schema changes.
+- Use `lifequest notion check learning-pulse` before syncing.
+- Use `lifequest notion bootstrap learning-pulse` to add missing properties or create the database under `NOTION_PARENT_PAGE_ID`.
 
 ### Step 2: Sync Automations
 
@@ -255,6 +257,7 @@ Future sync behavior:
 - Upsert by `Key`.
 - Include latest run status from `AutomationDefinition`.
 - Use `NOTION_AUTOMATIONS_DATA_SOURCE_ID` or `NOTION_AUTOMATIONS_DATABASE_ID`.
+- Use `lifequest notion check automations` before syncing.
 
 ### Step 3: Work Knowledge Capture
 
@@ -262,9 +265,35 @@ Future sync behavior:
 - Start with manual capture only.
 - Add Notion sync after capture is stable.
 - Use `NOTION_WORK_KNOWLEDGE_DATA_SOURCE_ID` or `NOTION_WORK_KNOWLEDGE_DATABASE_ID`.
+- Use `lifequest notion check work-knowledge` before syncing.
 
 ### Step 4: Inbox
 
 - Add `InboxItem` model, table, repository, service, API, and CLI.
 - Start manual.
 - Add Raindrop and Telegram adapters later.
+- Use `lifequest notion check inbox` before syncing once Inbox is implemented.
+
+## Schema Tooling
+
+Supported CLI:
+
+```bash
+lifequest notion schemas
+lifequest notion check all
+lifequest notion check learning-pulse
+lifequest notion bootstrap learning-pulse
+```
+
+Behavior:
+
+- `check` retrieves the target data source or legacy database and compares property names and property types.
+- `bootstrap` adds missing properties when a target id is configured.
+- `bootstrap` creates a database under `NOTION_PARENT_PAGE_ID` when no target id is configured.
+- `bootstrap` does not automatically convert mismatched property types; fix those manually in Notion.
+
+Required capabilities:
+
+- Reading/checking requires the Notion integration to have access to the target page/database.
+- Creating databases requires insert content capability.
+- Updating data source/database properties requires update content capability.

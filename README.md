@@ -243,12 +243,15 @@ GITHUB_TIMEOUT_SECONDS=10
 
 NOTION_ENABLED=false
 NOTION_TOKEN=
+NOTION_PARENT_PAGE_ID=
 NOTION_LEARNING_PULSE_DATA_SOURCE_ID=
 NOTION_LEARNING_PULSE_DATABASE_ID=
 NOTION_AUTOMATIONS_DATA_SOURCE_ID=
 NOTION_AUTOMATIONS_DATABASE_ID=
 NOTION_WORK_KNOWLEDGE_DATA_SOURCE_ID=
 NOTION_WORK_KNOWLEDGE_DATABASE_ID=
+NOTION_INBOX_DATA_SOURCE_ID=
+NOTION_INBOX_DATABASE_ID=
 NOTION_API_VERSION=
 NOTION_TIMEOUT_SECONDS=20
 ```
@@ -269,6 +272,9 @@ lifequest automation sync-notion
 lifequest work capture "Nginx 502 troubleshooting pattern" --category nginx --summary "A 502 often means the proxy cannot reach upstream." --command "systemctl status" --concept upstream
 lifequest work list
 lifequest work sync-notion
+lifequest notion schemas
+lifequest notion check all
+lifequest notion bootstrap learning-pulse
 ```
 
 The module form also works:
@@ -396,6 +402,19 @@ LifeQuest syncs one Notion row per date. It queries by the `Date` property first
 Current Notion API setups can use `NOTION_LEARNING_PULSE_DATA_SOURCE_ID`. Older database-based setups can use `NOTION_LEARNING_PULSE_DATABASE_ID`.
 
 The full Notion database plan and sync mapping lives in [docs/notion_schema.md](docs/notion_schema.md).
+
+Schema tooling:
+
+```bash
+lifequest notion schemas
+lifequest notion check all
+lifequest notion check learning-pulse
+lifequest notion bootstrap learning-pulse
+lifequest notion bootstrap automations
+lifequest notion bootstrap work-knowledge
+```
+
+`check` only reads Notion schema. `bootstrap` can add missing properties to an existing data source/database, or create a new database under `NOTION_PARENT_PAGE_ID` when no target id is configured. It does not automatically convert mismatched property types.
 
 Recommended properties:
 

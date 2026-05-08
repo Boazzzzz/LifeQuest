@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes import automations, health, integrations, learning, work_knowledge
+from app.api.routes import automations, health, integrations, learning, notion, work_knowledge
 from app.core.config import settings
 from app.core.database import initialize_database
 from app.core.logging import configure_logging
@@ -21,4 +21,5 @@ app.include_router(automations.router)
 app.include_router(health.router)
 app.include_router(integrations.router)
 app.include_router(learning.router)
+app.include_router(notion.router)
 app.include_router(work_knowledge.router)

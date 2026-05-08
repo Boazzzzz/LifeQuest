@@ -21,6 +21,7 @@ from app.models.work_knowledge import (
 )
 from app.services.automation import AutomationConflictError, AutomationNotFoundError, AutomationService
 from app.services.learning import LearningService
+from app.services.notion_schema import NotionSchemaService
 from app.services.notion_sync import NotionSyncService
 from app.services.work_knowledge import WorkKnowledgeNotFoundError, WorkKnowledgeService
 
@@ -46,6 +47,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _automation_command(args)
     if args.command == "work":
         return _work_command(args)
+    if args.command == "notion":
+        return _notion_command(args)
 
     parser.print_help()
     return 1
@@ -71,6 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("sync-notion", help="Sync today's learning pulse to Notion.")
     add_automation_parser(subparsers)
     add_work_parser(subparsers)
+    add_notion_parser(subparsers)
 
     return parser
 
@@ -144,6 +148,19 @@ def add_work_parser(subparsers: argparse._SubParsersAction) -> None:
     list_parser.add_argument("--limit", type=int, default=20)
 
     work_subparsers.add_parser("sync-notion", help="Sync work knowledge notes to Notion.")
+
+
+def add_notion_parser(subparsers: argparse._SubParsersAction) -> None:
+    notion_parser = subparsers.add_parser("notion", help="Check and bootstrap Notion schemas.")
+    notion_subparsers = notion_parser.add_subparsers(dest="notion_command", required=True)
+
+    notion_subparsers.add_parser("schemas", help="List supported Notion schemas.")
+
+    check_parser = notion_subparsers.add_parser("check", help="Check Notion database/data source schema.")
+    check_parser.add_argument("schema", nargs="?", default="all")
+
+    bootstrap_parser = notion_subparsers.add_parser("bootstrap", help="Create or repair Notion schema.")
+    bootstrap_parser.add_argument("schema", nargs="?", default="all")
 
 
 def _log_learning_session(args: argparse.Namespace) -> int:
@@ -366,6 +383,58 @@ async def _work_sync_notion(service: WorkKnowledgeService) -> int:
     result = await NotionSyncService().sync_work_knowledge(service.list_notes(limit=500))
     print(f"Work knowledge Notion sync: {result}")
     return 0 if result.get("status") in {"synced", "partial", "skipped"} else 1
+
+
+def _notion_command(args: argparse.Namespace) -> int:
+    service = NotionSchemaService()
+    try:
+        if args.notion_command == "schemas":
+            return _notion_schemas(service)
+        if args.notion_command == "check":
+            return asyncio.run(_notion_check(service, args.schema))
+        if args.notion_command == "bootstrap":
+            return asyncio.run(_notion_bootstrap(service, args.schema))
+    except ValueError as error:
+        print(str(error))
+        return 1
+    return 1
+
+
+def _notion_schemas(service: NotionSchemaService) -> int:
+    for schema in service.list_schemas():
+        print(f"{schema['key']}: {schema['title']}")
+    return 0
+
+
+async def _notion_check(service: NotionSchemaService, schema: str) -> int:
+    results = await service.check_all() if schema == "all" else [await service.check(schema)]
+    for result in results:
+        print(
+            f"{result.schema_key}: {result.status} "
+            f"missing={len(result.missing_properties)} "
+            f"mismatch={len(result.type_mismatches)}"
+            + (f" reason={result.reason}" if result.reason else "")
+        )
+        for item in result.missing_properties:
+            print(f"  missing {item.name}: expected {item.expected_type}")
+        for item in result.type_mismatches:
+            print(f"  mismatch {item.name}: expected {item.expected_type}, got {item.actual_type}")
+    return 0
+
+
+async def _notion_bootstrap(service: NotionSchemaService, schema: str) -> int:
+    results = await service.bootstrap_all() if schema == "all" else [await service.bootstrap(schema)]
+    for result in results:
+        print(
+            f"{result.schema_key}: {result.status} "
+            f"added={len(result.added_properties)}"
+            + (f" reason={result.reason}" if result.reason else "")
+        )
+        for property_name in result.added_properties:
+            print(f"  added {property_name}")
+        for step in result.next_steps:
+            print(f"  next: {step}")
+    return 0
 
 
 def parse_datetime(value: str) -> datetime:
