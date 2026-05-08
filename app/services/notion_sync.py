@@ -6,6 +6,7 @@ import httpx
 
 from app.core.config import settings
 from app.models.automation import AutomationDefinition
+from app.models.japanese import JapaneseVerbForm
 from app.models.learning import LearningPulse
 from app.models.work_knowledge import WorkKnowledgeNote
 
@@ -22,6 +23,8 @@ class NotionSyncService:
         self.automations_database_id = settings.notion_automations_database_id
         self.work_knowledge_data_source_id = settings.notion_work_knowledge_data_source_id or None
         self.work_knowledge_database_id = settings.notion_work_knowledge_database_id
+        self.japanese_verb_forms_data_source_id = settings.notion_japanese_verb_forms_data_source_id or None
+        self.japanese_verb_forms_database_id = settings.notion_japanese_verb_forms_database_id
         self.api_version = settings.notion_api_version or self._default_api_version()
         self.timeout_seconds = settings.notion_timeout_seconds
 
@@ -104,6 +107,53 @@ class NotionSyncService:
                 except httpx.HTTPError as error:
                     logger.warning("Failed to sync automation %s to Notion: %s", automation.key, error)
                     errors.append({"key": automation.key, "error": str(error)})
+
+        return {
+            "status": "synced" if not errors else "partial",
+            "created": created,
+            "updated": updated,
+            "errors": errors,
+        }
+
+    async def sync_japanese_verb_forms(self, verb_forms: list[JapaneseVerbForm]) -> dict[str, Any]:
+        if not self.enabled:
+            logger.info("Notion Japanese verb forms sync skipped because NOTION_ENABLED=false")
+            return {"status": "skipped", "reason": "notion_disabled"}
+
+        parent = self._japanese_verb_forms_parent()
+        if not self.token or parent is None:
+            logger.warning("Notion Japanese verb forms sync skipped because token or parent id is missing")
+            return {"status": "skipped", "reason": "missing_notion_config"}
+
+        headers = self._headers()
+        created = 0
+        updated = 0
+        errors: list[dict[str, str]] = []
+
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            for verb_form in verb_forms:
+                properties = self._build_japanese_verb_form_properties(verb_form)
+                try:
+                    page_id = await self._find_japanese_verb_form_page(client, headers, verb_form.id)
+                    if page_id:
+                        response = await client.patch(
+                            f"https://api.notion.com/v1/pages/{page_id}",
+                            headers=headers,
+                            json={"properties": properties},
+                        )
+                        response.raise_for_status()
+                        updated += 1
+                    else:
+                        response = await client.post(
+                            "https://api.notion.com/v1/pages",
+                            headers=headers,
+                            json={"parent": parent, "properties": properties},
+                        )
+                        response.raise_for_status()
+                        created += 1
+                except httpx.HTTPError as error:
+                    logger.warning("Failed to sync Japanese verb form %s to Notion: %s", verb_form.id, error)
+                    errors.append({"id": verb_form.id, "error": str(error)})
 
         return {
             "status": "synced" if not errors else "partial",
@@ -300,6 +350,58 @@ class NotionSyncService:
             "Updated At": self._date(note.updated_at),
         }
 
+    async def _find_japanese_verb_form_page(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        verb_form_id: str,
+    ) -> str | None:
+        parent_type, parent_id = self._japanese_verb_forms_parent_ref()
+        if parent_type == "data_source":
+            endpoint = f"https://api.notion.com/v1/data_sources/{parent_id}/query"
+        else:
+            endpoint = f"https://api.notion.com/v1/databases/{parent_id}/query"
+
+        response = await client.post(
+            endpoint,
+            headers=headers,
+            json={
+                "filter": {"property": "LifeQuest ID", "rich_text": {"equals": verb_form_id}},
+                "page_size": 1,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        results = data.get("results", []) if isinstance(data, dict) else []
+        if not results:
+            return None
+        page = results[0]
+        return str(page.get("id")) if isinstance(page, dict) and page.get("id") else None
+
+    def _build_japanese_verb_form_properties(self, verb_form: JapaneseVerbForm) -> dict[str, Any]:
+        title = f"{verb_form.dictionary_form} - 文体/時制"
+        return {
+            "Name": {"title": [{"text": {"content": title}}]},
+            "LifeQuest ID": self._rich_text(verb_form.id),
+            "Dictionary Form": self._rich_text(verb_form.dictionary_form),
+            "Reading": self._rich_text(verb_form.reading or ""),
+            "Meaning": self._rich_text(verb_form.meaning or ""),
+            "Verb Group": self._select(verb_form.verb_group.value),
+            "JLPT": self._select(verb_form.jlpt_level.value),
+            "Confidence": {"number": verb_form.confidence},
+            "Plain Nonpast": self._rich_text(verb_form.plain_nonpast),
+            "Polite Nonpast": self._rich_text(verb_form.polite_nonpast),
+            "Plain Past": self._rich_text(verb_form.plain_past),
+            "Polite Past": self._rich_text(verb_form.polite_past),
+            "Plain Negative": self._rich_text(verb_form.plain_negative),
+            "Polite Negative": self._rich_text(verb_form.polite_negative),
+            "Plain Negative Past": self._rich_text(verb_form.plain_negative_past),
+            "Polite Negative Past": self._rich_text(verb_form.polite_negative_past),
+            "Notes": self._rich_text(verb_form.notes or ""),
+            "Tags": self._multi_select(verb_form.tags),
+            "Updated At": self._date(verb_form.updated_at),
+        }
+
     def _learning_pulse_parent(self) -> dict[str, str] | None:
         parent_type, parent_id = self._learning_pulse_parent_ref()
         if not parent_id:
@@ -324,6 +426,14 @@ class NotionSyncService:
             return {"type": "data_source_id", "data_source_id": parent_id}
         return {"database_id": parent_id}
 
+    def _japanese_verb_forms_parent(self) -> dict[str, str] | None:
+        parent_type, parent_id = self._japanese_verb_forms_parent_ref()
+        if not parent_id:
+            return None
+        if parent_type == "data_source":
+            return {"type": "data_source_id", "data_source_id": parent_id}
+        return {"database_id": parent_id}
+
     def _learning_pulse_parent_ref(self) -> tuple[str, str | None]:
         if self.learning_data_source_id:
             return "data_source", self.learning_data_source_id
@@ -339,8 +449,18 @@ class NotionSyncService:
             return "data_source", self.work_knowledge_data_source_id
         return "database", self.work_knowledge_database_id
 
+    def _japanese_verb_forms_parent_ref(self) -> tuple[str, str | None]:
+        if self.japanese_verb_forms_data_source_id:
+            return "data_source", self.japanese_verb_forms_data_source_id
+        return "database", self.japanese_verb_forms_database_id
+
     def _default_api_version(self) -> str:
-        if self.learning_data_source_id or self.automations_data_source_id or self.work_knowledge_data_source_id:
+        if (
+            self.learning_data_source_id
+            or self.automations_data_source_id
+            or self.work_knowledge_data_source_id
+            or self.japanese_verb_forms_data_source_id
+        ):
             return "2025-09-03"
         return "2022-06-28"
 

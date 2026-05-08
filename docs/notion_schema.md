@@ -13,12 +13,13 @@ LifeQuest uses Notion as a dashboard and workspace layer. LifeQuest should not r
 
 ## Proposed Databases
 
-Start with four databases:
+Start with focused databases:
 
 ```text
 LifeQuest - Learning Pulse
 LifeQuest - Automations
 LifeQuest - Work Knowledge
+LifeQuest - Japanese Verb Forms
 LifeQuest - Inbox
 ```
 
@@ -27,7 +28,8 @@ Build order:
 1. `LifeQuest - Learning Pulse`
 2. `LifeQuest - Automations`
 3. `LifeQuest - Work Knowledge`
-4. `LifeQuest - Inbox`
+4. `LifeQuest - Japanese Verb Forms`
+5. `LifeQuest - Inbox`
 
 ## Sync Ownership
 
@@ -195,7 +197,65 @@ Concepts: reverse proxy, upstream health, service restart
 Sensitivity: personal
 ```
 
-## 4. LifeQuest - Inbox
+## 4. LifeQuest - Japanese Verb Forms
+
+Purpose:
+
+Focused table for verbs whose formality and tense/polarity forms need review.
+
+LifeQuest model:
+
+```text
+JapaneseVerbForm
+- dictionary_form
+- reading
+- meaning
+- verb_group
+- jlpt_level
+- confidence
+- plain_nonpast
+- polite_nonpast
+- plain_past
+- polite_past
+- plain_negative
+- polite_negative
+- plain_negative_past
+- polite_negative_past
+- notes
+- tags
+```
+
+Recommended properties:
+
+| Notion Property | Type | Source | LifeQuest Field | Notes |
+| --- | --- | --- | --- | --- |
+| Name | title | LifeQuest | generated | `{dictionary_form} - 文体/時制`. |
+| LifeQuest ID | rich text | LifeQuest | `id` | Stable upsert key. |
+| Dictionary Form | rich text | Shared | `dictionary_form` | 辞書形. |
+| Reading | rich text | Shared | `reading` | Optional reading. |
+| Meaning | rich text | Shared | `meaning` | Short meaning in English/Chinese. |
+| Verb Group | select | Shared | `verb_group` | `ichidan`, `godan`, `suru`, `kuru`, `irregular`. |
+| JLPT | select | Shared | `jlpt_level` | `N5`, `N4`, `N3`, `N2`, `N1`, `unknown`. |
+| Confidence | number | Shared | `confidence` | 1-5 self-rating. |
+| Plain Nonpast | rich text | LifeQuest | `plain_nonpast` | 普通形・非過去・肯定. |
+| Polite Nonpast | rich text | LifeQuest | `polite_nonpast` | 丁寧形・非過去・肯定. |
+| Plain Past | rich text | LifeQuest | `plain_past` | 普通形・過去・肯定. |
+| Polite Past | rich text | LifeQuest | `polite_past` | 丁寧形・過去・肯定. |
+| Plain Negative | rich text | LifeQuest | `plain_negative` | 普通形・非過去・否定. |
+| Polite Negative | rich text | LifeQuest | `polite_negative` | 丁寧形・非過去・否定. |
+| Plain Negative Past | rich text | LifeQuest | `plain_negative_past` | 普通形・過去・否定. |
+| Polite Negative Past | rich text | LifeQuest | `polite_negative_past` | 丁寧形・過去・否定. |
+| Notes | rich text | Shared | `notes` | Mistake reason or nuance. |
+| Tags | multi-select | Shared | `tags` | Grouping. |
+| Updated At | date | LifeQuest | `updated_at` | Last update timestamp. |
+
+Sync behavior:
+
+- Upsert by `LifeQuest ID`.
+- Auto-generates common forms for `ichidan`, `godan`, `suru`, and `kuru`.
+- `irregular` rows should provide forms manually.
+
+## 5. LifeQuest - Inbox
 
 Purpose:
 
@@ -267,7 +327,15 @@ Future sync behavior:
 - Use `NOTION_WORK_KNOWLEDGE_DATA_SOURCE_ID` or `NOTION_WORK_KNOWLEDGE_DATABASE_ID`.
 - Use `lifequest notion check work-knowledge` before syncing.
 
-### Step 4: Inbox
+### Step 4: Japanese Verb Forms
+
+- Add `JapaneseVerbForm` model, table, repository, service, API, and CLI.
+- Start with verb formality/tense table only.
+- Add Notion sync.
+- Use `NOTION_JAPANESE_VERB_FORMS_DATA_SOURCE_ID` or `NOTION_JAPANESE_VERB_FORMS_DATABASE_ID`.
+- Use `lifequest notion check japanese-verb-forms` before syncing.
+
+### Step 5: Inbox
 
 - Add `InboxItem` model, table, repository, service, API, and CLI.
 - Start manual.

@@ -11,7 +11,7 @@ def test_notion_schema_service_lists_expected_schemas():
     schemas = NotionSchemaService().list_schemas()
     keys = {schema["key"] for schema in schemas}
 
-    assert keys == {"learning-pulse", "automations", "work-knowledge", "inbox"}
+    assert keys == {"learning-pulse", "automations", "work-knowledge", "japanese-verb-forms", "inbox"}
 
 
 def test_notion_schema_check_skips_when_disabled(monkeypatch):
@@ -61,7 +61,13 @@ def test_notion_schema_api_lists_schemas():
         response = client.get("/notion/schemas")
 
     assert response.status_code == 200
-    assert {schema["key"] for schema in response.json()} == {"learning-pulse", "automations", "work-knowledge", "inbox"}
+    assert {schema["key"] for schema in response.json()} == {
+        "learning-pulse",
+        "automations",
+        "work-knowledge",
+        "japanese-verb-forms",
+        "inbox",
+    }
 
 
 def test_notion_schema_cli_lists_schemas(capsys):

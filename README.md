@@ -42,6 +42,7 @@ Implemented:
 - Notion Learning Pulse sync with upsert by date.
 - Automation registry and run ledger for existing external scripts/projects.
 - Work Knowledge manual capture and Notion sync for sanitized system-engineer notes.
+- Japanese verb formality/tense table for verbs you are actively learning.
 - CLI quick capture through `lifequest`.
 - FastAPI routes for local API testing.
 
@@ -218,6 +219,11 @@ The app uses `data/lifequest.db` by default. The database is ignored by git. Eac
 - `GET /work-knowledge`
 - `GET /work-knowledge/{note_id}`
 - `POST /work-knowledge/sync-notion`
+- `POST /japanese/verbs`
+- `GET /japanese/verbs`
+- `GET /japanese/verbs/{verb_form_id}`
+- `POST /japanese/verbs/seed`
+- `POST /japanese/verbs/sync-notion`
 
 ## Environment Variables
 
@@ -250,6 +256,8 @@ NOTION_AUTOMATIONS_DATA_SOURCE_ID=
 NOTION_AUTOMATIONS_DATABASE_ID=
 NOTION_WORK_KNOWLEDGE_DATA_SOURCE_ID=
 NOTION_WORK_KNOWLEDGE_DATABASE_ID=
+NOTION_JAPANESE_VERB_FORMS_DATA_SOURCE_ID=
+NOTION_JAPANESE_VERB_FORMS_DATABASE_ID=
 NOTION_INBOX_DATA_SOURCE_ID=
 NOTION_INBOX_DATABASE_ID=
 NOTION_API_VERSION=
@@ -275,6 +283,9 @@ lifequest work sync-notion
 lifequest notion schemas
 lifequest notion check all
 lifequest notion bootstrap learning-pulse
+lifequest japanese verb add 食べる --group ichidan --reading たべる --meaning "eat" --jlpt N5 --confidence 3
+lifequest japanese verb list
+lifequest japanese verb sync-notion
 ```
 
 The module form also works:
@@ -372,6 +383,47 @@ Safety boundary:
 - Do not store raw production logs, internal IPs, hostnames, tokens, customer names, ticket IDs, or full company Copilot transcripts.
 - Use `sensitivity` to mark whether a note is `public`, `personal`, `company_internal`, or `confidential`.
 
+## Japanese Verb Forms
+
+This table is intentionally small: one verb per row, focused only on formality and tense/polarity.
+
+Tracked forms:
+
+```text
+Plain Nonpast
+Polite Nonpast
+Plain Past
+Polite Past
+Plain Negative
+Polite Negative
+Plain Negative Past
+Polite Negative Past
+```
+
+Example:
+
+```bash
+lifequest japanese verb add 食べる \
+  --group ichidan \
+  --reading たべる \
+  --meaning "eat" \
+  --jlpt N5 \
+  --confidence 3 \
+  --tag verb
+
+lifequest japanese verb list
+lifequest japanese verb sync-notion
+```
+
+Supported auto-generation:
+
+- `ichidan`
+- `godan`
+- `suru`
+- `kuru`
+
+Use `irregular` only when you provide the forms manually.
+
 ## AnkiConnect
 
 To enable Anki stats:
@@ -412,6 +464,7 @@ lifequest notion check learning-pulse
 lifequest notion bootstrap learning-pulse
 lifequest notion bootstrap automations
 lifequest notion bootstrap work-knowledge
+lifequest notion bootstrap japanese-verb-forms
 ```
 
 `check` only reads Notion schema. `bootstrap` can add missing properties to an existing data source/database, or create a new database under `NOTION_PARENT_PAGE_ID` when no target id is configured. It does not automatically convert mismatched property types.

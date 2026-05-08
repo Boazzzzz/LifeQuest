@@ -108,6 +108,37 @@ ON work_knowledge_notes(source);
 
 CREATE INDEX IF NOT EXISTS idx_work_knowledge_notes_created_at
 ON work_knowledge_notes(created_at);
+
+CREATE TABLE IF NOT EXISTS japanese_verb_forms (
+    id TEXT PRIMARY KEY,
+    dictionary_form TEXT NOT NULL,
+    reading TEXT,
+    meaning TEXT,
+    verb_group TEXT NOT NULL,
+    jlpt_level TEXT NOT NULL,
+    confidence INTEGER,
+    plain_nonpast TEXT NOT NULL,
+    polite_nonpast TEXT NOT NULL,
+    plain_past TEXT NOT NULL,
+    polite_past TEXT NOT NULL,
+    plain_negative TEXT NOT NULL,
+    polite_negative TEXT NOT NULL,
+    plain_negative_past TEXT NOT NULL,
+    polite_negative_past TEXT NOT NULL,
+    notes TEXT,
+    tags TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_japanese_verb_forms_dictionary_form
+ON japanese_verb_forms(dictionary_form);
+
+CREATE INDEX IF NOT EXISTS idx_japanese_verb_forms_group
+ON japanese_verb_forms(verb_group);
+
+CREATE INDEX IF NOT EXISTS idx_japanese_verb_forms_jlpt
+ON japanese_verb_forms(jlpt_level);
 """
 
 

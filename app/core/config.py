@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     notion_automations_database_id: str | None = Field(default=None)
     notion_work_knowledge_data_source_id: str | None = Field(default=None)
     notion_work_knowledge_database_id: str | None = Field(default=None)
+    notion_japanese_verb_forms_data_source_id: str | None = Field(default=None)
+    notion_japanese_verb_forms_database_id: str | None = Field(default=None)
     notion_inbox_data_source_id: str | None = Field(default=None)
     notion_inbox_database_id: str | None = Field(default=None)
     notion_api_version: str | None = None
