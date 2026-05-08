@@ -10,11 +10,26 @@ LifeQuest should reduce administrative overhead and protect focus time. It shoul
 
 Core principles:
 
+- Do not reinvent the wheel. LifeQuest should orchestrate mature tools instead of replacing them.
 - SQLite is the local source of truth for MVP metadata and learning history.
 - Notion is a dashboard, not the canonical database.
 - External integrations must be optional and mock-friendly.
 - Existing automation projects should be integrated through adapters before being rewritten.
 - Risky automations, especially file moves and media cleanup, should start in dry-run mode.
+
+## Tool Responsibility Boundaries
+
+LifeQuest should not become a duplicate Notion, Anki, GitHub, Raindrop, or script runner. The project should only build custom functionality when existing tools do not already solve the problem well.
+
+Examples:
+
+- Daily life journaling belongs in Notion unless LifeQuest needs structured metadata for automation.
+- Spaced repetition belongs in Anki; LifeQuest should only read learning stats and summarize progress.
+- Code history belongs in GitHub; LifeQuest should only derive learning signals from commits.
+- Bookmark collection belongs in Raindrop; LifeQuest should only observe, classify, sync, or summarize where useful.
+- Existing automation scripts should remain external until there is a clear reason to wrap them with an adapter.
+
+Build inside LifeQuest only when the feature is orchestration, normalization, observability, cross-tool insight, or future game/frontend API support.
 
 ## Current Status
 
@@ -357,6 +372,8 @@ Integration Warnings: text
 
 ## Development Handoff Notes
 
+- Before adding a feature, check whether Notion, Anki, GitHub, Raindrop, Stash, or an existing project already handles it well.
+- Prefer integration, adapter, sync, or summary layers over rebuilding another app inside LifeQuest.
 - Keep adapters thin. Business logic belongs in services, not integration clients.
 - Do not make external APIs required for local development.
 - Prefer adding tests with fake adapters instead of requiring real tokens.
