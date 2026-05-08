@@ -1,5 +1,6 @@
 from datetime import date
 
+from app.models.automation import AutomationCategory, AutomationDefinition, AutomationRunStatus
 from app.models.learning import LearningPulse
 from app.services.notion_sync import NotionSyncService
 
@@ -48,3 +49,45 @@ def test_learning_pulse_notion_properties_match_schema():
     assert properties["Date"] == {"date": {"start": "2026-05-08"}}
     assert properties["Python Minutes"] == {"number": 45}
     assert properties["GitHub Python Commits"] == {"number": 2}
+
+
+def test_automation_notion_properties_match_schema():
+    automation = AutomationDefinition(
+        key="raindrop-classifier",
+        name="Raindrop Unsorted Classifier",
+        category=AutomationCategory.knowledge,
+        external_project_path="/projects/raindrop",
+        command_hint="python classify.py",
+        schedule_hint="daily",
+        log_path="/logs/raindrop.log",
+        owner="David",
+        enabled=True,
+        notes="Existing external project.",
+        tags=["raindrop", "bookmarks"],
+        last_run_status=AutomationRunStatus.success,
+        last_run_summary="Tagged 42 bookmarks.",
+    )
+
+    properties = NotionSyncService()._build_automation_properties(automation)
+
+    assert set(properties) == {
+        "Name",
+        "Key",
+        "Category",
+        "Enabled",
+        "Tags",
+        "External Project Path",
+        "Command Hint",
+        "Schedule Hint",
+        "Log Path",
+        "Owner",
+        "Notes",
+        "Last Run At",
+        "Last Run Status",
+        "Last Run Summary",
+        "Updated At",
+    }
+    assert properties["Key"] == {"rich_text": [{"text": {"content": "raindrop-classifier"}}]}
+    assert properties["Category"] == {"select": {"name": "knowledge"}}
+    assert properties["Enabled"] == {"checkbox": True}
+    assert properties["Last Run Status"] == {"select": {"name": "success"}}

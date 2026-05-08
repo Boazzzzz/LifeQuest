@@ -253,6 +253,7 @@ Future sync behavior:
 - Implement `sync_automations`.
 - Upsert by `Key`.
 - Include latest run status from `AutomationDefinition`.
+- Use `NOTION_AUTOMATIONS_DATA_SOURCE_ID` or `NOTION_AUTOMATIONS_DATABASE_ID`.
 
 ### Step 3: Work Knowledge Capture
 
@@ -265,4 +266,3 @@ Future sync behavior:
 - Add `InboxItem` model, table, repository, service, API, and CLI.
 - Start manual.
 - Add Raindrop and Telegram adapters later.
-

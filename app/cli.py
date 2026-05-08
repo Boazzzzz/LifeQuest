@@ -91,6 +91,8 @@ def add_automation_parser(subparsers: argparse._SubParsersAction) -> None:
     recent_parser = automation_subparsers.add_parser("recent", help="List recent automation runs.")
     recent_parser.add_argument("--limit", type=int, default=20)
 
+    automation_subparsers.add_parser("sync-notion", help="Sync automation registry to Notion.")
+
     log_run_parser = automation_subparsers.add_parser("log-run", help="Record one automation run.")
     log_run_parser.add_argument("automation_ref")
     log_run_parser.add_argument("--status", choices=[status.value for status in AutomationRunStatus], required=True)
@@ -180,6 +182,8 @@ def _automation_command(args: argparse.Namespace) -> int:
             return _automation_runs(service, args.automation_ref, args.limit)
         if args.automation_command == "recent":
             return _automation_recent(service, args.limit)
+        if args.automation_command == "sync-notion":
+            return asyncio.run(_automation_sync_notion(service))
         if args.automation_command == "log-run":
             return _automation_log_run(service, args)
     except (AutomationConflictError, AutomationNotFoundError) as error:
@@ -260,6 +264,12 @@ def _automation_log_run(service: AutomationService, args: argparse.Namespace) ->
     )
     print(f"Recorded automation run {run.id}: {run.status.value}")
     return 0
+
+
+async def _automation_sync_notion(service: AutomationService) -> int:
+    result = await NotionSyncService().sync_automations(service.list_definitions())
+    print(f"Automation Notion sync: {result}")
+    return 0 if result.get("status") in {"synced", "partial", "skipped"} else 1
 
 
 def _format_automation_run(run) -> str:

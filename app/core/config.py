@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     notion_token: str | None = None
     notion_learning_pulse_data_source_id: str | None = Field(default=None)
     notion_learning_pulse_database_id: str | None = Field(default=None)
+    notion_automations_data_source_id: str | None = Field(default=None)
+    notion_automations_database_id: str | None = Field(default=None)
     notion_api_version: str | None = None
     notion_timeout_seconds: float = 20.0
 

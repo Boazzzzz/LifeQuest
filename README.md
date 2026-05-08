@@ -208,6 +208,7 @@ The app uses `data/lifequest.db` by default. The database is ignored by git. Eac
 - `POST /automations/{automation_ref}/runs`
 - `GET /automations/{automation_ref}/runs`
 - `GET /automations/runs/recent`
+- `POST /automations/sync-notion`
 
 ## Environment Variables
 
@@ -235,6 +236,8 @@ NOTION_ENABLED=false
 NOTION_TOKEN=
 NOTION_LEARNING_PULSE_DATA_SOURCE_ID=
 NOTION_LEARNING_PULSE_DATABASE_ID=
+NOTION_AUTOMATIONS_DATA_SOURCE_ID=
+NOTION_AUTOMATIONS_DATABASE_ID=
 NOTION_API_VERSION=
 NOTION_TIMEOUT_SECONDS=20
 ```
@@ -251,6 +254,7 @@ lifequest import-anki
 lifequest import-github
 lifequest sync-notion
 lifequest automation list
+lifequest automation sync-notion
 ```
 
 The module form also works:
@@ -311,6 +315,7 @@ lifequest automation log-run raindrop-classifier \
 lifequest automation list
 lifequest automation runs raindrop-classifier
 lifequest automation recent
+lifequest automation sync-notion
 ```
 
 Current design boundary:
@@ -318,6 +323,7 @@ Current design boundary:
 - LifeQuest records and observes existing automations.
 - Existing scripts remain the source of their own behavior.
 - Direct trigger/control should be added later through adapters after each script is trusted.
+- Notion sync upserts by `Key` and writes registry fields plus latest run status.
 
 ## AnkiConnect
 

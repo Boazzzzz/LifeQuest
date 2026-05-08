@@ -96,6 +96,17 @@ def test_automation_api_registers_and_lists_runs(tmp_path, monkeypatch):
     assert list_response.json()[0]["items_processed"] == 3
 
 
+def test_automation_api_sync_notion_skips_when_disabled(tmp_path, monkeypatch):
+    use_temp_database(tmp_path, monkeypatch)
+    monkeypatch.setattr("app.core.config.settings.notion_enabled", False)
+
+    with TestClient(app) as client:
+        response = client.post("/automations/sync-notion")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "skipped", "reason": "notion_disabled"}
+
+
 def test_automation_cli_registers_and_logs_run(tmp_path, monkeypatch, capsys):
     use_temp_database(tmp_path, monkeypatch)
 

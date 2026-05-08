@@ -8,6 +8,7 @@ from app.models.automation import (
     AutomationRunCreate,
 )
 from app.services.automation import AutomationConflictError, AutomationNotFoundError, AutomationService
+from app.services.notion_sync import NotionSyncService
 
 router = APIRouter(prefix="/automations", tags=["automations"])
 
@@ -28,6 +29,12 @@ def list_automations() -> list[AutomationDefinition]:
 @router.get("/runs/recent", response_model=list[AutomationRun])
 def list_recent_automation_runs(limit: int = Query(default=50, ge=1, le=500)) -> list[AutomationRun]:
     return AutomationService().list_recent_runs(limit=limit)
+
+
+@router.post("/sync-notion")
+async def sync_automations_to_notion() -> dict:
+    automations = AutomationService().list_definitions()
+    return await NotionSyncService().sync_automations(automations)
 
 
 @router.get("/{automation_ref}", response_model=AutomationDefinition)
@@ -65,4 +72,3 @@ def list_automation_runs(
         return AutomationService().list_runs(automation_ref, limit=limit)
     except AutomationNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-
