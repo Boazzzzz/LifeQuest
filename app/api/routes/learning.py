@@ -1,7 +1,16 @@
+from datetime import date
+
 from fastapi import APIRouter, Query
 
 from app.integrations.anki import AnkiDailyStats
 from app.integrations.github import GitHubDailyPythonActivity
+from app.models.anki import (
+    AnkiDifficultCardTrend,
+    AnkiHistoryOverview,
+    AnkiReviewedTodayOverview,
+    AnkiTodayOverview,
+)
+from app.models.japanese import JapaneseDashboardOverview
 from app.models.learning import LearningPulse, LearningSession, LearningSessionCreate
 from app.services.learning import LearningService
 from app.services.notion_sync import NotionSyncService
@@ -22,6 +31,44 @@ def list_learning_sessions(limit: int = Query(default=100, ge=1, le=500)) -> lis
 @router.get("/pulse/today", response_model=LearningPulse)
 async def get_today_learning_pulse() -> LearningPulse:
     return await LearningService().build_today_pulse()
+
+
+@router.get("/anki/today", response_model=AnkiTodayOverview)
+async def get_today_anki_overview() -> AnkiTodayOverview:
+    return await LearningService().get_anki_today_overview()
+
+
+@router.get("/anki/reviewed-today", response_model=AnkiReviewedTodayOverview)
+async def get_anki_reviewed_today(target_date: date | None = Query(default=None, alias="date")) -> AnkiReviewedTodayOverview:
+    return await LearningService().get_anki_reviewed_today_overview(target_date=target_date)
+
+
+@router.get("/anki/history", response_model=AnkiHistoryOverview)
+def get_anki_history(days: int = Query(default=7, ge=1, le=90)) -> AnkiHistoryOverview:
+    return LearningService().get_anki_history(days=days)
+
+
+@router.get("/anki/difficult-history", response_model=list[AnkiDifficultCardTrend])
+def get_anki_difficult_history(
+    days: int = Query(default=7, ge=1, le=90),
+    limit: int = Query(default=10, ge=1, le=50),
+) -> list[AnkiDifficultCardTrend]:
+    return LearningService().get_anki_difficult_card_history(days=days, limit=limit)
+
+
+@router.get("/japanese/dashboard", response_model=JapaneseDashboardOverview)
+async def get_japanese_dashboard(
+    target_date: date | None = Query(default=None, alias="date"),
+    history_days: int = Query(default=7, ge=1, le=30),
+    difficult_days: int = Query(default=14, ge=1, le=60),
+    difficult_limit: int = Query(default=10, ge=1, le=30),
+) -> JapaneseDashboardOverview:
+    return await LearningService().get_japanese_dashboard(
+        target_date=target_date,
+        history_days=history_days,
+        difficult_days=difficult_days,
+        difficult_limit=difficult_limit,
+    )
 
 
 @router.post("/import/anki/today", response_model=AnkiDailyStats)

@@ -12,6 +12,7 @@ from app.models.automation import (
     AutomationTriggerSource,
 )
 from app.services.automation import AutomationConflictError, AutomationService
+from app.services.scheduled_automation import ScheduledAutomationService
 
 
 def use_temp_database(tmp_path, monkeypatch):
@@ -149,3 +150,79 @@ def test_automation_cli_registers_and_logs_run(tmp_path, monkeypatch, capsys):
     assert "Registered automation mobile-game-scripts" in captured.out
     assert "mobile-game-scripts [game] Mobile Game Scripts" in captured.out
     assert "last: success" in captured.out
+
+
+def test_scheduled_automation_service_runs_anki_daily_and_records_run(tmp_path, monkeypatch):
+    use_temp_database(tmp_path, monkeypatch)
+
+    class FakeLearningService:
+        async def import_anki_today(self):
+            class Stats:
+                enabled = True
+                error = None
+                reviews = 46
+                decks = ["N3"]
+
+            return Stats()
+
+    service = ScheduledAutomationService(learning_service=FakeLearningService())
+    run = service.run("anki-daily")
+    definitions = AutomationService().list_definitions()
+
+    assert run.status == AutomationRunStatus.success
+    assert run.items_processed == 46
+    assert "Imported 46 Anki reviews" in (run.summary or "")
+    assert definitions[0].key == "anki-daily"
+    assert definitions[0].last_run_status == AutomationRunStatus.success
+
+
+def test_scheduled_automation_service_runs_open_anki_and_records_run(tmp_path, monkeypatch):
+    use_temp_database(tmp_path, monkeypatch)
+    desktop_path = tmp_path / "anki.exe"
+    desktop_path.write_text("", encoding="utf-8")
+    launches = []
+
+    def fake_popen(args, **kwargs):
+        launches.append((args, kwargs))
+        return object()
+
+    monkeypatch.setattr("app.core.config.settings.anki_desktop_path", str(desktop_path))
+    monkeypatch.setattr("app.services.scheduled_automation.subprocess.Popen", fake_popen)
+
+    service = ScheduledAutomationService()
+    run = service.run("open-anki")
+    definitions = AutomationService().list_definitions()
+
+    assert launches[0][0] == [str(desktop_path)]
+    assert run.status == AutomationRunStatus.success
+    assert run.items_processed == 1
+    assert definitions[0].key == "open-anki"
+    assert definitions[0].last_run_status == AutomationRunStatus.success
+
+
+def test_scheduled_automation_cli_lists_and_runs_anki_daily(tmp_path, monkeypatch, capsys):
+    use_temp_database(tmp_path, monkeypatch)
+    monkeypatch.setattr("app.core.config.settings.anki_enabled", False)
+
+    list_code = cli_main(["automation", "scheduled-tasks"])
+    run_code = cli_main(["automation", "run-scheduled", "anki-daily"])
+    captured = capsys.readouterr()
+
+    assert list_code == 0
+    assert run_code == 0
+    assert "anki-daily [learning] Anki Daily Import" in captured.out
+    assert "skipped" in captured.out.lower()
+
+
+def test_scheduled_automation_cli_runs_open_anki(tmp_path, monkeypatch, capsys):
+    use_temp_database(tmp_path, monkeypatch)
+    desktop_path = tmp_path / "anki.exe"
+    desktop_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr("app.core.config.settings.anki_desktop_path", str(desktop_path))
+    monkeypatch.setattr("app.services.scheduled_automation.subprocess.Popen", lambda *args, **kwargs: object())
+
+    run_code = cli_main(["automation", "run-scheduled", "open-anki"])
+    captured = capsys.readouterr()
+
+    assert run_code == 0
+    assert "Launched desktop Anki" in captured.out

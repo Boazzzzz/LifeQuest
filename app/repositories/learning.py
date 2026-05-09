@@ -1,61 +1,59 @@
 import json
 from datetime import date, datetime, time, timezone
 
-from app.core.database import connect
+from app.core.database import execute, fetch_all, select_limit_clause
 from app.models.learning import LearningSession
 
 
 class LearningRepository:
     def create_session(self, session: LearningSession) -> LearningSession:
-        with connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO learning_sessions (
-                    id, subject, started_at, ended_at, duration_minutes, source,
-                    summary, difficulty, energy_level, tags, created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    session.id,
-                    session.subject.value,
-                    session.started_at.isoformat(),
-                    session.ended_at.isoformat() if session.ended_at else None,
-                    session.duration_minutes,
-                    session.source.value,
-                    session.summary,
-                    session.difficulty,
-                    session.energy_level,
-                    json.dumps(session.tags, ensure_ascii=False),
-                    session.created_at.isoformat(),
-                ),
+        execute(
+            """
+            INSERT INTO learning_sessions (
+                id, subject, started_at, ended_at, duration_minutes, source,
+                summary, difficulty, energy_level, tags, created_at
             )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session.id,
+                session.subject.value,
+                session.started_at.isoformat(),
+                session.ended_at.isoformat() if session.ended_at else None,
+                session.duration_minutes,
+                session.source.value,
+                session.summary,
+                session.difficulty,
+                session.energy_level,
+                json.dumps(session.tags, ensure_ascii=False),
+                session.created_at.isoformat(),
+            ),
+        )
         return session
 
     def list_sessions(self, limit: int = 100) -> list[LearningSession]:
-        with connect() as connection:
-            rows = connection.execute(
-                """
-                SELECT * FROM learning_sessions
-                ORDER BY started_at DESC
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
+        limit_clause = select_limit_clause(limit)
+        query = f"""
+            SELECT {limit_clause}* FROM learning_sessions
+            ORDER BY started_at DESC
+        """
+        if limit_clause:
+            rows = fetch_all(query)
+        else:
+            rows = fetch_all(f"{query}\nLIMIT ?", (limit,))
         return [self._row_to_session(row) for row in rows]
 
     def list_sessions_for_date(self, target_date: date) -> list[LearningSession]:
         start = datetime.combine(target_date, time.min, tzinfo=timezone.utc)
         end = datetime.combine(target_date, time.max, tzinfo=timezone.utc)
-        with connect() as connection:
-            rows = connection.execute(
-                """
-                SELECT * FROM learning_sessions
-                WHERE started_at >= ? AND started_at <= ?
-                ORDER BY started_at ASC
-                """,
-                (start.isoformat(), end.isoformat()),
-            ).fetchall()
+        rows = fetch_all(
+            """
+            SELECT * FROM learning_sessions
+            WHERE started_at >= ? AND started_at <= ?
+            ORDER BY started_at ASC
+            """,
+            (start.isoformat(), end.isoformat()),
+        )
         return [self._row_to_session(row) for row in rows]
 
     def _row_to_session(self, row) -> LearningSession:

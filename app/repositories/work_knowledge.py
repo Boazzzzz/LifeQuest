@@ -1,43 +1,35 @@
 import json
 from datetime import datetime
 
-from app.core.database import connect
+from app.core.database import execute, fetch_all, fetch_one, select_limit_clause
 from app.models.work_knowledge import WorkKnowledgeNote
 
 
 class WorkKnowledgeRepository:
     def create_note(self, note: WorkKnowledgeNote) -> WorkKnowledgeNote:
-        with connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO work_knowledge_notes (
-                    id, title, category, sanitized_summary, commands, concepts,
-                    source, sensitivity, systems, follow_up, tags, created_at, updated_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                self._note_values(note),
+        execute(
+            """
+            INSERT INTO work_knowledge_notes (
+                id, title, category, sanitized_summary, commands, concepts,
+                source, sensitivity, systems, follow_up, tags, created_at, updated_at
             )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            self._note_values(note),
+        )
         return note
 
     def list_notes(self, limit: int = 100) -> list[WorkKnowledgeNote]:
-        with connect() as connection:
-            rows = connection.execute(
-                """
-                SELECT * FROM work_knowledge_notes
-                ORDER BY created_at DESC
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
+        limit_clause = select_limit_clause(limit)
+        query = f"""
+            SELECT {limit_clause}* FROM work_knowledge_notes
+            ORDER BY created_at DESC
+        """
+        rows = fetch_all(query) if limit_clause else fetch_all(f"{query}\nLIMIT ?", (limit,))
         return [self._row_to_note(row) for row in rows]
 
     def get_note(self, note_id: str) -> WorkKnowledgeNote | None:
-        with connect() as connection:
-            row = connection.execute(
-                "SELECT * FROM work_knowledge_notes WHERE id = ?",
-                (note_id,),
-            ).fetchone()
+        row = fetch_one("SELECT * FROM work_knowledge_notes WHERE id = ?", (note_id,))
         return self._row_to_note(row) if row else None
 
     def _note_values(self, note: WorkKnowledgeNote) -> tuple:

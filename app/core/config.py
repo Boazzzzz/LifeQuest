@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -8,7 +9,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "LifeQuest"
     environment: str = "development"
+    database_backend: Literal["sqlite", "mssql"] = "sqlite"
     database_path: Path = Path("data/lifequest.db")
+    mssql_connection_string: str | None = None
     log_level: str = "INFO"
 
     anki_enabled: bool = False
@@ -16,6 +19,7 @@ class Settings(BaseSettings):
     anki_api_version: int = 6
     anki_timeout_seconds: float = 5.0
     anki_decks: str = ""
+    anki_desktop_path: str = r"C:\Users\boaz0\AppData\Local\Programs\Anki\anki.exe"
 
     github_enabled: bool = False
     github_token: str | None = None

@@ -1,8 +1,10 @@
 import argparse
 import asyncio
-from datetime import datetime, timezone
+import sys
+from datetime import date, datetime, timezone
 from typing import Sequence
 
+from app.integrations.anki import AnkiAdapter
 from app.core.database import initialize_database
 from app.core.logging import configure_logging
 from app.models.automation import (
@@ -12,7 +14,15 @@ from app.models.automation import (
     AutomationRunStatus,
     AutomationTriggerSource,
 )
+from app.models.anki import AnkiHistoryOverview, AnkiReviewedTodayOverview, AnkiTodayOverview
 from app.models.learning import LearningSessionCreate, LearningSubject
+from app.models.subscription import (
+    SubscriptionCategory,
+    SubscriptionCreate,
+    SubscriptionLifecycleStatus,
+    SubscriptionRecurrenceKind,
+    SubscriptionUpdate,
+)
 from app.models.work_knowledge import (
     WorkKnowledgeCategory,
     WorkKnowledgeNoteCreate,
@@ -23,6 +33,8 @@ from app.services.automation import AutomationConflictError, AutomationNotFoundE
 from app.services.learning import LearningService
 from app.services.notion_schema import NotionSchemaService
 from app.services.notion_sync import NotionSyncService
+from app.services.scheduled_automation import ScheduledAutomationNotFoundError, ScheduledAutomationService
+from app.services.subscription import SubscriptionConflictError, SubscriptionNotFoundError, SubscriptionService
 from app.services.work_knowledge import WorkKnowledgeNotFoundError, WorkKnowledgeService
 
 
@@ -30,6 +42,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    _configure_console_output()
     configure_logging()
     initialize_database()
 
@@ -37,6 +50,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _log_learning_session(args)
     if args.command == "pulse":
         return asyncio.run(_print_today_pulse())
+    if args.command == "daily":
+        return asyncio.run(_run_daily())
+    if args.command == "anki-status":
+        return asyncio.run(_print_anki_status())
+    if args.command == "anki-today":
+        return asyncio.run(_print_anki_today())
+    if args.command == "anki-reviewed-today":
+        return asyncio.run(_print_anki_reviewed_today(args))
+    if args.command == "anki-history":
+        return _print_anki_history(args)
+    if args.command == "anki-difficult-history":
+        return _print_anki_difficult_history(args)
     if args.command == "import-anki":
         return asyncio.run(_import_anki_today())
     if args.command == "import-github":
@@ -45,6 +70,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return asyncio.run(_sync_notion_today())
     if args.command == "automation":
         return _automation_command(args)
+    if args.command == "subscription":
+        return _subscription_command(args)
     if args.command == "work":
         return _work_command(args)
     if args.command == "notion":
@@ -69,10 +96,27 @@ def build_parser() -> argparse.ArgumentParser:
     log_parser.add_argument("--ended-at", type=parse_datetime)
 
     subparsers.add_parser("pulse", help="Print today's learning pulse.")
+    subparsers.add_parser("daily", help="Run the daily local learning check workflow.")
+    subparsers.add_parser("anki-status", help="Check AnkiConnect status and configured decks.")
+    subparsers.add_parser("anki-today", help="Show today's Anki stats from snapshot or live data.")
+    reviewed_today_parser = subparsers.add_parser(
+        "anki-reviewed-today",
+        help="Show all unique cards reviewed today across new learning and reviews.",
+    )
+    reviewed_today_parser.add_argument("--date", type=parse_date, default=None)
+    history_parser = subparsers.add_parser("anki-history", help="Show recent Anki snapshot history.")
+    history_parser.add_argument("--days", type=int, default=7)
+    difficult_history_parser = subparsers.add_parser(
+        "anki-difficult-history",
+        help="Show difficult cards that repeated in recent snapshots.",
+    )
+    difficult_history_parser.add_argument("--days", type=int, default=7)
+    difficult_history_parser.add_argument("--limit", type=int, default=10)
     subparsers.add_parser("import-anki", help="Import today's Anki review stats.")
     subparsers.add_parser("import-github", help="Import today's GitHub Python activity.")
     subparsers.add_parser("sync-notion", help="Sync today's learning pulse to Notion.")
     add_automation_parser(subparsers)
+    add_subscription_parser(subparsers)
     add_work_parser(subparsers)
     add_notion_parser(subparsers)
 
@@ -104,6 +148,13 @@ def add_automation_parser(subparsers: argparse._SubParsersAction) -> None:
 
     recent_parser = automation_subparsers.add_parser("recent", help="List recent automation runs.")
     recent_parser.add_argument("--limit", type=int, default=20)
+
+    automation_subparsers.add_parser("scheduled-tasks", help="List built-in scheduled automation tasks.")
+    run_scheduled_parser = automation_subparsers.add_parser(
+        "run-scheduled",
+        help="Run one built-in scheduled automation task and record the result.",
+    )
+    run_scheduled_parser.add_argument("task_key")
 
     automation_subparsers.add_parser("sync-notion", help="Sync automation registry to Notion.")
 
@@ -150,6 +201,76 @@ def add_work_parser(subparsers: argparse._SubParsersAction) -> None:
     work_subparsers.add_parser("sync-notion", help="Sync work knowledge notes to Notion.")
 
 
+def add_subscription_parser(subparsers: argparse._SubParsersAction) -> None:
+    subscription_parser = subparsers.add_parser("subscription", help="Track recurring monthly subscriptions.")
+    subscription_subparsers = subscription_parser.add_subparsers(dest="subscription_command", required=True)
+
+    add_parser = subscription_subparsers.add_parser("add", help="Add one subscription.")
+    add_parser.add_argument("name", nargs="+")
+    add_parser.add_argument("--key")
+    add_parser.add_argument("--amount", type=float, required=True)
+    add_parser.add_argument("--currency", default="TWD")
+    add_parser.add_argument(
+        "--recurrence",
+        choices=[kind.value for kind in SubscriptionRecurrenceKind],
+        default=SubscriptionRecurrenceKind.monthly.value,
+    )
+    add_parser.add_argument("--billing-day", type=int)
+    add_parser.add_argument("--anchor-charge-date", type=parse_date)
+    add_parser.add_argument("--interval-days", type=int)
+    add_parser.add_argument(
+        "--category",
+        choices=[category.value for category in SubscriptionCategory],
+        default="other",
+    )
+    add_parser.add_argument(
+        "--status",
+        choices=[status.value for status in SubscriptionLifecycleStatus],
+        default=SubscriptionLifecycleStatus.active.value,
+    )
+    add_parser.add_argument("--notes")
+    add_parser.add_argument("--tag", action="append", default=[])
+    add_parser.add_argument("--inactive", action="store_true")
+
+    list_parser = subscription_subparsers.add_parser("list", help="List subscriptions.")
+    list_parser.add_argument("--all", action="store_true")
+    list_parser.add_argument(
+        "--status",
+        choices=[status.value for status in SubscriptionLifecycleStatus],
+    )
+
+    overview_parser = subscription_subparsers.add_parser("overview", help="Show monthly subscription overview.")
+    overview_parser.add_argument("--date", type=parse_date, default=None)
+    overview_parser.add_argument("--days-ahead", type=int, default=30)
+
+    update_parser = subscription_subparsers.add_parser("update", help="Update one subscription.")
+    update_parser.add_argument("subscription_ref")
+    update_parser.add_argument("--name", nargs="+")
+    update_parser.add_argument("--amount", type=float)
+    update_parser.add_argument("--currency")
+    update_parser.add_argument(
+        "--recurrence",
+        choices=[kind.value for kind in SubscriptionRecurrenceKind],
+    )
+    update_parser.add_argument("--billing-day", type=int)
+    update_parser.add_argument("--anchor-charge-date", type=parse_date)
+    update_parser.add_argument("--interval-days", type=int)
+    update_parser.add_argument(
+        "--category",
+        choices=[category.value for category in SubscriptionCategory],
+    )
+    update_parser.add_argument(
+        "--status",
+        choices=[status.value for status in SubscriptionLifecycleStatus],
+    )
+    update_parser.add_argument("--notes")
+    update_parser.add_argument("--tag", action="append", default=None)
+    state_group = update_parser.add_mutually_exclusive_group()
+    state_group.add_argument("--active", dest="active", action="store_true")
+    state_group.add_argument("--inactive", dest="active", action="store_false")
+    update_parser.set_defaults(active=None)
+
+
 def add_notion_parser(subparsers: argparse._SubParsersAction) -> None:
     notion_parser = subparsers.add_parser("notion", help="Check and bootstrap Notion schemas.")
     notion_subparsers = notion_parser.add_subparsers(dest="notion_command", required=True)
@@ -183,24 +304,129 @@ def _log_learning_session(args: argparse.Namespace) -> int:
 
 async def _print_today_pulse() -> int:
     pulse = await LearningService().build_today_pulse()
-    print(f"Date: {pulse.date.isoformat()}")
-    print(f"Python: {pulse.python_minutes} min")
-    print(f"Japanese: {pulse.japanese_minutes} min")
-    print(f"Anki: {pulse.anki_reviews} reviews")
-    print(f"GitHub Python commits: {pulse.github_python_commits}")
-    print(f"Focus score: {pulse.focus_score}")
-    print(f"Tomorrow: {pulse.tomorrow_priority}")
-    if pulse.integration_warnings:
-        print("Warnings: " + " | ".join(pulse.integration_warnings))
+    _print_pulse(pulse)
+    return 0
+
+
+async def _run_daily() -> int:
+    service = LearningService()
+    print("Daily check")
+    print("===========")
+
+    anki_stats = await service.import_anki_today()
+    if not anki_stats.enabled:
+        print("Anki: disabled")
+    elif anki_stats.error:
+        print(f"Anki: import warning ({anki_stats.error})")
+    else:
+        snapshot = service.get_anki_snapshot(datetime.now().date())
+        print("Anki: snapshot updated")
+        _print_anki_overview(
+            service.build_anki_overview(
+                stats=anki_stats,
+                source="snapshot",
+                imported_at=snapshot.imported_at if snapshot is not None else None,
+            )
+        )
+
+    print("")
+    print("Learning pulse")
+    print("--------------")
+    _print_pulse(await service.build_today_pulse())
+    return 0
+
+
+async def _print_anki_status() -> int:
+    status = await AnkiAdapter().check_status()
+    if not status.enabled:
+        print("Anki status: disabled (set ANKI_ENABLED=true to enable)")
+        return 0
+
+    if not status.connected:
+        print(f"Anki status: not connected ({status.error or 'unknown error'})")
+        print(f"URL: {status.url}")
+        return 1
+
+    print("Anki status: connected")
+    print(f"URL: {status.url}")
+    print(f"API version: {status.api_version}")
+    print(f"Scope: {status.scope}")
+    print(f"Decks in use: {', '.join(status.decks) if status.decks else '(none)'}")
+    if status.configured_decks:
+        print(f"Configured decks: {', '.join(status.configured_decks)}")
+    if status.missing_decks:
+        print(f"Missing configured decks: {', '.join(status.missing_decks)}")
+    return 0
+
+
+async def _print_anki_today() -> int:
+    overview = await LearningService().get_anki_today_overview()
+    if not overview.enabled:
+        print("Anki today: disabled (set ANKI_ENABLED=true to enable)")
+        return 0
+
+    if overview.error:
+        print(f"Anki today: unavailable ({overview.error})")
+        return 1
+
+    _print_anki_overview(overview)
+    return 0
+
+
+async def _print_anki_reviewed_today(args: argparse.Namespace) -> int:
+    overview = await LearningService().get_anki_reviewed_today_overview(target_date=args.date)
+    if not overview.enabled:
+        print("Anki reviewed today: disabled (set ANKI_ENABLED=true to enable)")
+        return 0
+
+    if overview.error:
+        print(f"Anki reviewed today: unavailable ({overview.error})")
+        return 1
+
+    _print_reviewed_today_overview(overview)
+    return 0
+
+
+def _print_anki_history(args: argparse.Namespace) -> int:
+    history = LearningService().get_anki_history(days=max(1, args.days))
+    _print_anki_history_overview(history)
+    return 0
+
+
+def _print_anki_difficult_history(args: argparse.Namespace) -> int:
+    trends = LearningService().get_anki_difficult_card_history(
+        days=max(1, args.days),
+        limit=max(1, args.limit),
+    )
+    print(f"Difficult cards history ({max(1, args.days)} days)")
+    print("===================================")
+    if not trends:
+        print("No difficult cards recorded in recent snapshots.")
+        return 0
+
+    for trend in trends:
+        print(f"{trend.hit_count}x | {trend.last_seen_on.isoformat()} | {trend.label}")
     return 0
 
 
 async def _import_anki_today() -> int:
-    stats = await LearningService().import_anki_today()
+    service = LearningService()
+    stats = await service.import_anki_today()
+    if not stats.enabled:
+        print("Anki import skipped: ANKI_ENABLED=false")
+        return 0
     if stats.error:
         print(f"Anki import warning: {stats.error}")
         return 1
-    print(f"Anki reviews: {stats.reviews}, accuracy: {stats.accuracy}")
+    print("Anki import: snapshot updated")
+    snapshot = service.get_anki_snapshot(datetime.now().date())
+    _print_anki_overview(
+        service.build_anki_overview(
+            stats=stats,
+            source="snapshot",
+            imported_at=snapshot.imported_at if snapshot is not None else None,
+        )
+    )
     return 0
 
 
@@ -235,11 +461,15 @@ def _automation_command(args: argparse.Namespace) -> int:
             return _automation_runs(service, args.automation_ref, args.limit)
         if args.automation_command == "recent":
             return _automation_recent(service, args.limit)
+        if args.automation_command == "scheduled-tasks":
+            return _automation_scheduled_tasks()
+        if args.automation_command == "run-scheduled":
+            return _automation_run_scheduled(args.task_key)
         if args.automation_command == "sync-notion":
             return asyncio.run(_automation_sync_notion(service))
         if args.automation_command == "log-run":
             return _automation_log_run(service, args)
-    except (AutomationConflictError, AutomationNotFoundError) as error:
+    except (AutomationConflictError, AutomationNotFoundError, ScheduledAutomationNotFoundError) as error:
         print(str(error))
         return 1
     return 1
@@ -300,6 +530,25 @@ def _automation_recent(service: AutomationService, limit: int) -> int:
     return 0
 
 
+def _automation_scheduled_tasks() -> int:
+    tasks = ScheduledAutomationService().list_specs()
+    if not tasks:
+        print("No built-in scheduled tasks yet.")
+        return 0
+
+    for task in tasks:
+        print(f"{task.key} [{task.category.value}] {task.name} | schedule: {task.schedule_hint}")
+    return 0
+
+
+def _automation_run_scheduled(task_key: str) -> int:
+    run = ScheduledAutomationService().run(task_key)
+    print(_format_automation_run(run))
+    if run.error_message:
+        print(f"error: {run.error_message}")
+    return 0 if run.status in {AutomationRunStatus.success, AutomationRunStatus.skipped} else 1
+
+
 def _automation_log_run(service: AutomationService, args: argparse.Namespace) -> int:
     run = service.create_run(
         args.automation_ref,
@@ -333,6 +582,139 @@ def _format_automation_run(run) -> str:
         f"items={run.items_processed} "
         f"automation_id={run.automation_id}{summary}"
     )
+
+
+def _subscription_command(args: argparse.Namespace) -> int:
+    service = SubscriptionService()
+    try:
+        if args.subscription_command == "add":
+            return _subscription_add(service, args)
+        if args.subscription_command == "list":
+            active_only = (not args.all) and args.status in {None, SubscriptionLifecycleStatus.active.value}
+            return _subscription_list(service, active_only=active_only, status=args.status)
+        if args.subscription_command == "overview":
+            return _subscription_overview(service, args)
+        if args.subscription_command == "update":
+            return _subscription_update(service, args)
+    except (SubscriptionConflictError, SubscriptionNotFoundError) as error:
+        print(str(error))
+        return 1
+    return 1
+
+
+def _subscription_add(service: SubscriptionService, args: argparse.Namespace) -> int:
+    subscription = service.create_subscription(
+        SubscriptionCreate(
+            key=args.key,
+            name=" ".join(args.name),
+            amount=args.amount,
+            currency=args.currency,
+            recurrence_kind=args.recurrence,
+            billing_day=args.billing_day,
+            anchor_charge_date=args.anchor_charge_date,
+            interval_days=args.interval_days,
+            category=args.category,
+            status=SubscriptionLifecycleStatus.paused.value if args.inactive else args.status,
+            active=not args.inactive,
+            notes=args.notes,
+            tags=args.tag,
+        )
+    )
+    print(f"Added subscription {subscription.key}: {subscription.name}")
+    return 0
+
+
+def _subscription_list(service: SubscriptionService, active_only: bool, status: str | None = None) -> int:
+    subscriptions = service.list_subscriptions(active_only=active_only)
+    if status is not None:
+        subscriptions = [subscription for subscription in subscriptions if subscription.status.value == status]
+    if not subscriptions:
+        print("No subscriptions recorded yet." if not active_only else "No active subscriptions recorded yet.")
+        return 0
+
+    for subscription in subscriptions:
+        next_charge = subscription.next_charge_date.isoformat() if subscription.next_charge_date else "n/a"
+        print(
+            f"{subscription.key} [{subscription.currency} {subscription.amount:.2f}] "
+            f"{_format_subscription_schedule(subscription)} next={next_charge} "
+            f"schedule={subscription.schedule_status.value} lifecycle={subscription.status.value} {subscription.name}"
+        )
+    return 0
+
+
+def _subscription_overview(service: SubscriptionService, args: argparse.Namespace) -> int:
+    overview = service.build_monthly_overview(target_date=args.date, days_ahead=max(1, args.days_ahead))
+    print(f"Subscription overview ({overview.target_date.isoformat()} to {overview.window_end.isoformat()})")
+    print(f"Active subscriptions: {overview.active_subscription_count}")
+    print(f"Paused subscriptions: {overview.paused_subscription_count}")
+    print(f"Cancelled subscriptions: {overview.cancelled_subscription_count}")
+    print(f"Scheduled subscriptions: {overview.scheduled_subscription_count}")
+    print(f"Needs schedule review: {overview.missing_schedule_count}")
+    if overview.totals_by_currency:
+        print("Monthly totals:")
+        for currency, total in sorted(overview.totals_by_currency.items()):
+            print(f"- {currency} {total:.2f}")
+    else:
+        print("Monthly totals: none")
+
+    if overview.totals_by_category:
+        print("Category totals:")
+        for category, currency_totals in sorted(overview.totals_by_category.items()):
+            summary = ", ".join(
+                f"{currency} {total:.2f}" for currency, total in sorted(currency_totals.items())
+            )
+            print(f"- {category}: {summary}")
+
+    if not overview.upcoming_charges:
+        print("Upcoming charges: none")
+    else:
+        print("Upcoming charges:")
+        for charge in overview.upcoming_charges:
+            print(
+                f"- {charge.next_charge_date.isoformat()} | {charge.currency} {charge.amount:.2f} | "
+                f"{charge.name} | in {charge.days_until_charge} day(s)"
+            )
+
+    if overview.missing_schedule_subscriptions:
+        print("Needs review:")
+        for subscription in overview.missing_schedule_subscriptions:
+            print(
+                f"- {subscription.key} | {subscription.currency} {subscription.amount:.2f} | "
+                f"{subscription.schedule_summary}"
+            )
+    return 0
+
+
+def _subscription_update(service: SubscriptionService, args: argparse.Namespace) -> int:
+    subscription = service.update_subscription(
+        args.subscription_ref,
+        SubscriptionUpdate(
+            name=" ".join(args.name) if args.name else None,
+            amount=args.amount,
+            currency=args.currency,
+            recurrence_kind=args.recurrence,
+            billing_day=args.billing_day,
+            anchor_charge_date=args.anchor_charge_date,
+            interval_days=args.interval_days,
+            category=args.category,
+            status=args.status,
+            active=args.active,
+            notes=args.notes,
+            tags=args.tag,
+        ),
+    )
+    print(f"Updated subscription {subscription.key}: {subscription.name}")
+    return 0
+
+
+def _format_subscription_schedule(subscription) -> str:
+    if subscription.recurrence_kind == SubscriptionRecurrenceKind.monthly:
+        return f"monthly day={subscription.billing_day if subscription.billing_day is not None else '?'}"
+    if subscription.recurrence_kind == SubscriptionRecurrenceKind.fixed_days:
+        anchor = subscription.anchor_charge_date.isoformat() if subscription.anchor_charge_date else "?"
+        interval = subscription.interval_days if subscription.interval_days is not None else "?"
+        return f"every {interval} days from {anchor}"
+    return "schedule=unknown"
 
 
 def _work_command(args: argparse.Namespace) -> int:
@@ -442,6 +824,127 @@ def parse_datetime(value: str) -> datetime:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed
+
+
+def parse_date(value: str) -> date:
+    return date.fromisoformat(value)
+
+
+def _configure_console_output() -> None:
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except ValueError:
+            continue
+
+
+def _print_anki_overview(overview: AnkiTodayOverview) -> None:
+    print(f"Anki today source: {overview.source}")
+    print(f"Scope: {overview.scope}")
+    print(f"Sync status: {overview.sync_status}")
+    if overview.imported_at is not None:
+        print(f"Snapshot imported at: {overview.imported_at.isoformat()}")
+    print(f"Reviews: {overview.reviews}")
+    print(f"Again answers: {overview.again_count}")
+    print(
+        "Buttons: "
+        f"Again {overview.again_count}, "
+        f"Hard {overview.hard_count}, "
+        f"Good {overview.good_count}, "
+        f"Easy {overview.easy_count}"
+    )
+    print(f"Non-Again rate: {overview.non_again_rate if overview.non_again_rate is not None else 'n/a'}")
+    print(f"Legacy accuracy: {overview.accuracy if overview.accuracy is not None else 'n/a'}")
+    print(f"Current streak: {overview.streak_days} day(s)")
+    print(
+        "Due workload: "
+        f"{overview.due_count} total "
+        f"(new {overview.new_due_count}, learn {overview.learn_due_count}, review {overview.review_due_count})"
+    )
+    print(f"Review load: {overview.review_load}")
+    print(f"Summary: {overview.summary}")
+    print(f"Recommendation: {overview.recommendation}")
+    print(f"Sync hint: {overview.sync_hint}")
+    print(f"Decks in use: {', '.join(overview.decks) if overview.decks else '(none)'}")
+    if overview.configured_decks:
+        print(f"Configured decks: {', '.join(overview.configured_decks)}")
+    if overview.missing_decks:
+        print(f"Missing configured decks: {', '.join(overview.missing_decks)}")
+    if overview.difficult_cards:
+        print("Difficult cards:")
+        for card in overview.difficult_cards:
+            print(f"- {card}")
+
+
+def _print_anki_history_overview(history: AnkiHistoryOverview) -> None:
+    print("Anki history")
+    print("============")
+    print(f"Current streak: {history.streak_days} day(s)")
+    print(f"Total reviews: {history.total_reviews}")
+    print(f"Average non-Again rate: {history.average_accuracy if history.average_accuracy is not None else 'n/a'}")
+    print(f"Best review day: {history.best_review_day.isoformat() if history.best_review_day is not None else 'n/a'}")
+    if not history.days:
+        print("No snapshot history yet. Run import-anki after syncing desktop Anki.")
+        return
+
+    print("")
+    print("Date        Reviews  Non-Again  Again  Hard  Good  Easy  Due")
+    for day in history.days:
+        non_again_text = f"{day.non_again_rate:.1f}%" if day.non_again_rate is not None else "n/a"
+        print(
+            f"{day.snapshot_date.isoformat()}  "
+            f"{str(day.reviews).rjust(7)}  "
+            f"{non_again_text.rjust(9)}  "
+            f"{str(day.again_count).rjust(5)}  "
+            f"{str(day.hard_count).rjust(4)}  "
+            f"{str(day.good_count).rjust(4)}  "
+            f"{str(day.easy_count).rjust(4)}  "
+            f"{str(day.due_count).rjust(3)}"
+        )
+
+
+def _print_reviewed_today_overview(overview: AnkiReviewedTodayOverview) -> None:
+    print("Anki reviewed today")
+    print("===================")
+    print(f"Date: {overview.target_date.isoformat()}")
+    print(f"Scope: {overview.scope}")
+    print(f"Total reviews: {overview.total_reviews}")
+    print(f"Unique cards: {overview.total_unique_cards}")
+    print(f"Decks in use: {', '.join(overview.decks) if overview.decks else '(none)'}")
+    if overview.configured_decks:
+        print(f"Configured decks: {', '.join(overview.configured_decks)}")
+    if overview.missing_decks:
+        print(f"Missing configured decks: {', '.join(overview.missing_decks)}")
+    if not overview.cards:
+        print("No reviewed cards found for today.")
+        return
+
+    print("")
+    print("Time      Reviews  Buttons              Deck / Card")
+    for card in overview.cards:
+        buttons = f"A{card.again_count} H{card.hard_count} G{card.good_count} E{card.easy_count}"
+        print(
+            f"{card.last_reviewed_at.strftime('%H:%M:%S')}  "
+            f"{str(card.review_count).rjust(7)}  "
+            f"{buttons.ljust(18)}  "
+            f"{card.deck_name}: {card.label}"
+        )
+
+
+def _print_pulse(pulse) -> None:
+    print(f"Date: {pulse.date.isoformat()}")
+    print(f"Python: {pulse.python_minutes} min")
+    print(f"Japanese: {pulse.japanese_minutes} min")
+    print(f"Anki: {pulse.anki_reviews} reviews")
+    print(f"GitHub Python commits: {pulse.github_python_commits}")
+    print(f"Focus score: {pulse.focus_score}")
+    print(f"Tomorrow: {pulse.tomorrow_priority}")
+    if pulse.integration_warnings:
+        print("Warnings: " + " | ".join(pulse.integration_warnings))
 
 
 if __name__ == "__main__":

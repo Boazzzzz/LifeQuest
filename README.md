@@ -1,8 +1,8 @@
 # LifeQuest
 
-LifeQuest is a personal automation command center. It is designed to connect learning, knowledge capture, media organization, existing scripts, and Notion dashboards through one backend.
+LifeQuest is a personal life operating system backend with a growing frontend. It is designed to connect learning, life admin, knowledge capture, existing automations, and future dashboards through one coherent local platform.
 
-The first working slice is **Learning Core** for Python and Japanese, because those are the highest-priority life goals right now.
+The first working slice was **Learning Core** for Python and Japanese, because those were the highest-priority life goals at the start. The more durable direction is broader: LifeQuest should become a daily control center for both learning and life management.
 
 ## Product Goal
 
@@ -11,11 +11,47 @@ LifeQuest should reduce administrative overhead and protect focus time. It shoul
 Core principles:
 
 - Do not reinvent the wheel. LifeQuest should orchestrate mature tools instead of replacing them.
-- SQLite is the local source of truth for LifeQuest-owned metadata and learning history.
-- Notion is the workspace for human-maintained content and the dashboard for generated summaries.
+- A local relational database is the source of truth for LifeQuest-owned metadata and learning history.
+- Notion is the workspace for human-maintained content and the dashboard for generated summaries, not the canonical database.
 - External integrations must be optional and mock-friendly.
 - Existing automation projects should be integrated through adapters before being rewritten.
 - Risky automations, especially file moves and media cleanup, should start in dry-run mode.
+
+## Product Shape
+
+The most reasonable long-term shape for LifeQuest is:
+
+- One backend that stores and normalizes your personal operational data.
+- One frontend that you can actually open every day without feeling buried.
+- Several focused modules instead of one giant everything-app.
+
+The core product should stay centered on five areas:
+
+- `Learning`: sessions, Anki, GitHub activity, progress summaries, and review loops.
+- `Life Admin`: subscriptions, recurring costs, small personal admin signals, and later reminders.
+- `Knowledge`: work notes, personal references, and a future inbox/review flow.
+- `Automation`: existing scripts, run history, integrations, and operational visibility.
+- `Dashboard / Review`: a calm daily homepage plus a future weekly review surface.
+
+This boundary matters. LifeQuest should be your integration and decision layer, not a full replacement for every specialized tool you already use.
+
+## Frontend Direction
+
+The frontend should eventually feel like a personal control center, not a generic CRUD panel.
+
+It should prioritize:
+
+- A homepage that explains today in one screen.
+- Clear module entry points for learning, life admin, knowledge, and automation.
+- A weekly review page that turns raw records into decisions.
+- Enough visual personality that opening it feels motivating, not bureaucratic.
+
+Current UI status:
+
+- `GET /` and `GET /dashboard` serve a frontend prototype homepage.
+- `GET /life-admin/subscriptions` serves a live subscription management page for review, create, edit, and lifecycle changes.
+- `GET /japanese` serves a narrower Japanese-focused dashboard.
+- The homepage is intentionally a direction-setting prototype: some sections use fallback content until every backend slice is wired to live data.
 
 ## Tool Responsibility Boundaries
 
@@ -37,21 +73,24 @@ Implemented:
 
 - Manual learning session logging for Python and Japanese.
 - Daily `LearningPulse` generation.
-- AnkiConnect status, daily review import, accuracy estimate, and difficult-card capture.
+- AnkiConnect status, configured-deck checks, daily snapshot import, accuracy estimate, and difficult-card capture.
+- Anki history, difficult-card trends, due workload, and new/learn/review split for configured deck scopes.
 - GitHub status, recent push activity import, and Python commit detection.
 - Notion Learning Pulse sync with upsert by date.
 - Automation registry and run ledger for existing external scripts/projects.
 - Work Knowledge manual capture and Notion sync for sanitized system-engineer notes.
+- Monthly subscription tracker with local API and CLI support.
 - Notion schema/bootstrap support for a Japanese verb formality/tense reference table.
 - CLI quick capture through `lifequest`.
 - FastAPI routes for local API testing.
+- Frontend prototype homepage for the full LifeQuest direction, plus a live subscription management page.
 
 Not implemented yet:
 
 - Raindrop, Telegram queue, Stash, and mobile game script adapters.
 - Knowledge inbox.
 - ACG media library scanner.
-- Frontend or game layer.
+- Unified live frontend beyond the current homepage prototype, subscription page, and Japanese slice.
 
 ## Architecture
 
@@ -64,7 +103,7 @@ LifeQuest
     Pydantic schemas that normalize data before SQLite storage or Notion sync.
 
   Repository Layer
-    SQLite persistence for learning sessions and activity events.
+    Database-backed persistence for learning sessions, activity events, and daily snapshots.
 
   Service Layer
     Business workflows such as pulse generation, import jobs, Notion sync, and future automation ledgers.
@@ -174,8 +213,10 @@ Still pending:
 ### Phase 5: Frontend / Game Layer
 
 - Use LifeQuest API as the backend.
-- Add quests, streaks, focus score, experience, and daily review loops.
-- Keep game logic separate from core data ingestion.
+- Turn the homepage prototype into a fully live control center.
+- Add dedicated pages for Learning, Life Admin, Knowledge, and Automation.
+- Add a weekly review flow before any heavier game layer.
+- Add quests, streaks, focus score, experience, and playful loops only after the core product is already useful without them.
 
 ## Setup On A New Machine
 
@@ -192,9 +233,45 @@ Open:
 
 ```text
 http://127.0.0.1:8000/docs
+http://127.0.0.1:8000/
+http://127.0.0.1:8000/dashboard
+http://127.0.0.1:8000/life-admin/subscriptions
+http://127.0.0.1:8000/japanese
 ```
 
-The app uses `data/lifequest.db` by default. The database is ignored by git. Each machine can have its own local SQLite file unless you intentionally sync or migrate it.
+The app uses `data/lifequest.db` by default with `DATABASE_BACKEND=sqlite`. The database file is ignored by git. Each machine can have its own local SQLite file unless you intentionally sync or migrate it.
+
+## Database Backends
+
+LifeQuest defaults to SQLite for local use, but it can also run against MSSQL when you want to practice a work-style database setup.
+
+### SQLite mode
+
+```env
+DATABASE_BACKEND=sqlite
+DATABASE_PATH=data/lifequest.db
+```
+
+### MSSQL mode
+
+Install the optional dependency first:
+
+```bash
+python3 -m pip install -e '.[dev,mssql]'
+```
+
+Then configure:
+
+```env
+DATABASE_BACKEND=mssql
+MSSQL_CONNECTION_STRING=Driver={ODBC Driver 18 for SQL Server};Server=localhost,1433;Database=LifeQuest;UID=sa;PWD=YourStrong!Passw0rd;Encrypt=no;TrustServerCertificate=yes
+```
+
+Notes:
+
+- SQLite remains the simplest default for personal daily use.
+- MSSQL support is intended for learning and work-style practice.
+- The current MSSQL schema keeps timestamp fields as ISO strings so the Python repository layer can stay backend-compatible while you learn the switching pattern.
 
 ## Core Endpoints
 
@@ -219,6 +296,11 @@ The app uses `data/lifequest.db` by default. The database is ignored by git. Eac
 - `GET /work-knowledge`
 - `GET /work-knowledge/{note_id}`
 - `POST /work-knowledge/sync-notion`
+- `POST /subscriptions`
+- `GET /subscriptions`
+- `GET /subscriptions/{subscription_ref}`
+- `PATCH /subscriptions/{subscription_ref}`
+- `GET /subscriptions/overview/monthly`
 
 ## Environment Variables
 
@@ -227,7 +309,9 @@ Copy `.env.example` to `.env` and fill only the integrations you want to test.
 ```env
 APP_NAME=LifeQuest
 ENVIRONMENT=development
+DATABASE_BACKEND=sqlite
 DATABASE_PATH=data/lifequest.db
+MSSQL_CONNECTION_STRING=
 LOG_LEVEL=INFO
 
 ANKI_ENABLED=false
@@ -267,11 +351,19 @@ After installing the project in editable mode, you can log learning directly:
 lifequest log python 45 "FastAPI dependency injection" --tag fastapi
 lifequest log japanese 30 "N3 grammar review" --difficulty 3
 lifequest pulse
+lifequest daily
+lifequest anki-status
+lifequest anki-today
+lifequest anki-history --days 7
+lifequest anki-difficult-history --days 14 --limit 10
 lifequest import-anki
 lifequest import-github
 lifequest sync-notion
 lifequest automation list
 lifequest automation sync-notion
+lifequest subscription add "ChatGPT Plus" --amount 20 --currency USD --billing-day 9 --category ai
+lifequest subscription list
+lifequest subscription overview --days-ahead 30
 lifequest work capture "Nginx 502 troubleshooting pattern" --category nginx --summary "A 502 often means the proxy cannot reach upstream." --command "systemctl status" --concept upstream
 lifequest work list
 lifequest work sync-notion
@@ -339,6 +431,8 @@ lifequest automation log-run raindrop-classifier \
 lifequest automation list
 lifequest automation runs raindrop-classifier
 lifequest automation recent
+lifequest automation scheduled-tasks
+lifequest automation run-scheduled anki-daily
 lifequest automation sync-notion
 ```
 
@@ -346,8 +440,103 @@ Current design boundary:
 
 - LifeQuest records and observes existing automations.
 - Existing scripts remain the source of their own behavior.
-- Direct trigger/control should be added later through adapters after each script is trusted.
+- Direct trigger/control should be added through narrow adapters after each script is trusted.
 - Notion sync upserts by `Key` and writes registry fields plus latest run status.
+
+Built-in scheduled tasks:
+
+- `anki-daily` runs the daily Anki import through LifeQuest and records the result in the automation ledger.
+- More built-in scheduled tasks should be added one by one as stable entrypoints, instead of pointing Windows Task Scheduler at many unrelated raw commands.
+
+Recommended Windows Task Scheduler pattern:
+
+```powershell
+.venv\Scripts\python.exe -m app.cli automation run-scheduled anki-daily
+```
+
+This keeps the scheduler responsible only for *when* to run. LifeQuest stays responsible for:
+
+- what task key means
+- how the task runs
+- how success/failure is recorded
+- how future scheduled items are added consistently
+
+For Anki on Windows, a low-risk staged rollout is:
+
+1. Schedule `open-anki` at 18:00.
+2. Watch it for a few days and confirm desktop Anki opens and syncs cleanly.
+3. Then schedule `anki-daily` at 18:10 so the import runs after desktop Anki is already open.
+
+Example task commands:
+
+```powershell
+.venv\Scripts\python.exe -m app.cli automation run-scheduled open-anki
+.venv\Scripts\python.exe -m app.cli automation run-scheduled anki-daily
+```
+
+## Subscriptions
+
+LifeQuest can track recurring monthly subscriptions in the local database.
+
+Use `Subscription` for the tracker:
+
+```text
+key
+name
+amount
+currency
+billing_day
+category
+status
+notes
+tags
+```
+
+Current MVP:
+
+- Add and update subscriptions through API or CLI.
+- Show active monthly totals grouped by currency.
+- Calculate the next charge date for each active subscription.
+- Support fixed monthly schedules, fixed-day intervals such as every 30 days, and unknown schedules you want to fill later.
+- Support lifecycle states for `active`, `paused`, and `cancelled` subscriptions.
+- Separate scheduled subscriptions from items that still need billing-date review.
+- Show category totals and missing-schedule items in the overview.
+- List upcoming charges in a configurable forward-looking window.
+- Provide a dedicated frontend page for subscription review, creation, editing, filtering, and lifecycle changes.
+
+Example CLI workflow:
+
+```bash
+lifequest subscription add "ChatGPT Plus" \
+  --amount 20 \
+  --currency USD \
+  --billing-day 9 \
+  --category ai \
+  --tag work
+
+lifequest subscription add "YouTube Premium" \
+  --amount 199 \
+  --currency TWD \
+  --billing-day 28 \
+  --category entertainment
+
+lifequest subscription add "Vtuber Member" \
+  --amount 75 \
+  --currency TWD \
+  --billing-day 28 \
+  --category membership
+
+lifequest subscription add "Bahamut Anime" \
+  --amount 390 \
+  --currency JPY \
+  --recurrence unknown \
+  --status paused \
+  --category entertainment
+
+lifequest subscription list
+lifequest subscription overview --days-ahead 30
+lifequest subscription update chatgpt-plus --recurrence unknown --notes "Primary AI tool"
+```
 
 ## Work Knowledge
 
@@ -426,9 +615,26 @@ To enable Anki stats:
 3. Set `ANKI_ENABLED=true` in `.env`.
 4. Optionally set `ANKI_DECKS=Deck One,Deck Two` to limit review analysis.
 
-LifeQuest reads review counts from AnkiConnect and, when deck review rows are available, estimates accuracy and lists cards answered with Again.
+LifeQuest uses Anki in a read-only mode:
+
+- `anki-status` checks connectivity and shows which configured decks are actually available.
+- `import-anki` captures a daily snapshot into the local database.
+- `anki-today` shows a daily report with reviews, button distribution, non-Again rate, streak, due workload, and a next-step recommendation.
+- `anki-history` shows recent snapshot history, total reviews, button distribution trends, average non-Again rate, and current streak.
+- `anki-difficult-history` shows which difficult cards repeated across recent snapshots.
+- `daily` runs the common local check flow: import today's Anki snapshot, then print the learning pulse.
+
+If `ANKI_DECKS` is set, LifeQuest filters the analysis to those decks only, automatically includes child decks underneath each configured parent deck, and reports any configured deck names that are missing in Anki.
 
 If you mainly use Anki on mobile, sync mobile Anki to AnkiWeb, open desktop Anki on the Mac, sync desktop Anki, then run LifeQuest. AnkiConnect only runs inside desktop Anki.
+
+Recommended mobile-first workflow:
+
+1. Review on your phone as usual.
+2. When you get back to your computer, sync phone Anki to AnkiWeb.
+3. Open desktop Anki and sync it.
+4. Run `lifequest daily` or `lifequest import-anki`.
+5. Run `lifequest anki-today` later if you want to re-check today's snapshot and sync hint.
 
 ## GitHub
 

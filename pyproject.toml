@@ -15,6 +15,9 @@ dependencies = [
 dev = [
   "pytest>=8.0.0",
 ]
+mssql = [
+  "pyodbc>=5.1.0",
+]
 
 [project.scripts]
 lifequest = "app.cli:main"
