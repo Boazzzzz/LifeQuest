@@ -3,6 +3,7 @@
 ## Issue 1: Adopt a real database migration workflow
 
 - Priority: P1
+- Status: Groundwork implemented
 - Problem: schema upgrades are currently embedded in runtime initialization, which makes versioned upgrades harder to reason about as the database evolves.
 - Scope:
   - introduce a migration tool and baseline revision

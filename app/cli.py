@@ -7,6 +7,7 @@ from typing import Sequence
 from app.integrations.anki import AnkiAdapter
 from app.core.database import initialize_database
 from app.core.logging import configure_logging
+from app.core.migrations import list_migration_statuses, run_migrations
 from app.models.automation import (
     AutomationCategory,
     AutomationDefinitionCreate,
@@ -44,6 +45,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     _configure_console_output()
     configure_logging()
+
+    if args.command == "db":
+        return _db_command(args)
+
     initialize_database()
 
     if args.command == "log":
@@ -115,6 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("import-anki", help="Import today's Anki review stats.")
     subparsers.add_parser("import-github", help="Import today's GitHub Python activity.")
     subparsers.add_parser("sync-notion", help="Sync today's learning pulse to Notion.")
+    add_db_parser(subparsers)
     add_automation_parser(subparsers)
     add_subscription_parser(subparsers)
     add_work_parser(subparsers)
@@ -173,6 +179,13 @@ def add_automation_parser(subparsers: argparse._SubParsersAction) -> None:
     log_run_parser.add_argument("--log-excerpt")
     log_run_parser.add_argument("--started-at", type=parse_datetime)
     log_run_parser.add_argument("--finished-at", type=parse_datetime)
+
+
+def add_db_parser(subparsers: argparse._SubParsersAction) -> None:
+    db_parser = subparsers.add_parser("db", help="Inspect or apply database migrations.")
+    db_subparsers = db_parser.add_subparsers(dest="db_command", required=True)
+    db_subparsers.add_parser("upgrade", help="Apply all pending database migrations.")
+    db_subparsers.add_parser("status", help="Show the current migration status.")
 
 
 def add_work_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -448,6 +461,30 @@ async def _sync_notion_today() -> int:
     result = await NotionSyncService().sync_learning_pulse(pulse)
     print(f"Notion sync: {result}")
     return 0 if result.get("status") in {"created", "updated", "skipped"} else 1
+
+
+def _db_command(args: argparse.Namespace) -> int:
+    if args.db_command == "upgrade":
+        run_migrations()
+        print("Database migrations applied.")
+        return _db_status()
+    if args.db_command == "status":
+        return _db_status()
+    return 1
+
+
+def _db_status() -> int:
+    statuses = list_migration_statuses()
+    if not statuses:
+        print("No migrations registered.")
+        return 0
+
+    for status in statuses:
+        state = "applied" if status.applied else "pending"
+        print(f"{status.revision} [{state}] {status.description}")
+    pending = sum(1 for status in statuses if not status.applied)
+    print(f"Pending migrations: {pending}")
+    return 0
 
 
 def _automation_command(args: argparse.Namespace) -> int:

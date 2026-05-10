@@ -455,16 +455,9 @@ MSSQL_SCHEMA_STATEMENTS = [
 
 
 def initialize_database() -> None:
-    if settings.database_backend == "sqlite":
-        settings.database_path.parent.mkdir(parents=True, exist_ok=True)
-        with connect() as connection:
-            connection.executescript(SQLITE_SCHEMA)
-            _ensure_sqlite_snapshot_columns(connection)
-            _ensure_sqlite_subscription_columns(connection)
-        return
+    from app.core.migrations import run_migrations
 
-    for statement in MSSQL_SCHEMA_STATEMENTS:
-        execute(statement)
+    run_migrations()
 
 
 @contextmanager

@@ -273,6 +273,19 @@ Notes:
 - MSSQL support is intended for learning and work-style practice.
 - The current MSSQL schema keeps timestamp fields as ISO strings so the Python repository layer can stay backend-compatible while you learn the switching pattern.
 
+## Database Migrations
+
+LifeQuest now uses versioned application migrations instead of relying only on startup-time schema patching.
+
+Useful commands:
+
+```bash
+lifequest db status
+lifequest db upgrade
+```
+
+The app still applies pending migrations automatically on startup, but the CLI gives you an explicit workflow for inspecting and upgrading schema revisions.
+
 ## Core Endpoints
 
 - `GET /health`
@@ -360,6 +373,8 @@ lifequest anki-difficult-history --days 14 --limit 10
 lifequest import-anki
 lifequest import-github
 lifequest sync-notion
+lifequest db status
+lifequest db upgrade
 lifequest automation list
 lifequest automation sync-notion
 lifequest subscription add "ChatGPT Plus" --amount 20 --currency USD --billing-day 9 --category ai
