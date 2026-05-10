@@ -2,6 +2,7 @@ import calendar
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 
+from app.models.activity import ActivityEvent, ActivityEventType
 from app.models.subscription import (
     SubscriptionAttentionItem,
     Subscription,
@@ -14,6 +15,7 @@ from app.models.subscription import (
     SubscriptionRecurrenceKind,
     generate_subscription_key,
 )
+from app.repositories.activity import ActivityRepository
 from app.repositories.subscription import SubscriptionRepository
 
 
@@ -26,8 +28,13 @@ class SubscriptionConflictError(ValueError):
 
 
 class SubscriptionService:
-    def __init__(self, repository: SubscriptionRepository | None = None) -> None:
+    def __init__(
+        self,
+        repository: SubscriptionRepository | None = None,
+        activity_repository: ActivityRepository | None = None,
+    ) -> None:
         self.repository = repository or SubscriptionRepository()
+        self.activity_repository = activity_repository or ActivityRepository()
 
     def create_subscription(self, payload: SubscriptionCreate) -> Subscription:
         now = datetime.now(timezone.utc)
@@ -54,7 +61,19 @@ class SubscriptionService:
             created = self.repository.create_subscription(subscription)
         except sqlite3.IntegrityError as error:
             raise SubscriptionConflictError(self._build_conflict_message(subscription)) from error
-
+        self.activity_repository.create_event(
+            ActivityEvent(
+                event_type=ActivityEventType.subscription_created,
+                source="subscription",
+                payload={
+                    "subscription_id": created.id,
+                    "key": created.key,
+                    "name": created.name,
+                    "amount": created.amount,
+                    "currency": created.currency,
+                },
+            )
+        )
         return self._attach_next_charge_date(created)
 
     def list_subscriptions(self, active_only: bool = False, reference_date: date | None = None) -> list[Subscription]:
@@ -95,7 +114,20 @@ class SubscriptionService:
             updated = self.repository.update_subscription(current)
         except sqlite3.IntegrityError as error:
             raise SubscriptionConflictError(self._build_conflict_message(current)) from error
-
+        self.activity_repository.create_event(
+            ActivityEvent(
+                event_type=ActivityEventType.subscription_updated,
+                source="subscription",
+                payload={
+                    "subscription_id": updated.id,
+                    "key": updated.key,
+                    "name": updated.name,
+                    "amount": updated.amount,
+                    "currency": updated.currency,
+                    "status": updated.status.value,
+                },
+            )
+        )
         return self._attach_next_charge_date(updated)
 
     def build_monthly_overview(

@@ -939,6 +939,7 @@ def _print_pulse(pulse) -> None:
     print(f"Date: {pulse.date.isoformat()}")
     print(f"Python: {pulse.python_minutes} min")
     print(f"Japanese: {pulse.japanese_minutes} min")
+    print(f"SRE: {pulse.sre_minutes} min")
     print(f"Anki: {pulse.anki_reviews} reviews")
     print(f"GitHub Python commits: {pulse.github_python_commits}")
     print(f"Focus score: {pulse.focus_score}")

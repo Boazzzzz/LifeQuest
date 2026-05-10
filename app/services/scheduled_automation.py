@@ -94,6 +94,14 @@ class ScheduledAutomationService:
         raise ScheduledAutomationNotFoundError(f"Scheduled automation not found: {task_key}")
 
     def _run_open_anki(self) -> ScheduledAutomationOutcome:
+        if settings.anki_desktop_path is None:
+            return ScheduledAutomationOutcome(
+                status=AutomationRunStatus.failed,
+                items_processed=0,
+                summary="Failed to launch desktop Anki.",
+                error_message="ANKI_DESKTOP_PATH is not configured.",
+            )
+
         desktop_path = Path(settings.anki_desktop_path)
         if not desktop_path.exists():
             return ScheduledAutomationOutcome(

@@ -1,7 +1,7 @@
 import json
 from datetime import date, datetime, time, timezone
 
-from app.core.database import execute, fetch_all, select_limit_clause
+from app.core.database import execute, fetch_all, is_mssql_backend
 from app.models.learning import LearningSession
 
 
@@ -31,16 +31,25 @@ class LearningRepository:
         )
         return session
 
-    def list_sessions(self, limit: int = 100) -> list[LearningSession]:
-        limit_clause = select_limit_clause(limit)
-        query = f"""
-            SELECT {limit_clause}* FROM learning_sessions
-            ORDER BY started_at DESC
-        """
-        if limit_clause:
-            rows = fetch_all(query)
+    def list_sessions(self, limit: int = 100, offset: int = 0) -> list[LearningSession]:
+        if is_mssql_backend():
+            rows = fetch_all(
+                """
+                SELECT * FROM learning_sessions
+                ORDER BY started_at DESC, id DESC
+                OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+                """,
+                (offset, limit),
+            )
         else:
-            rows = fetch_all(f"{query}\nLIMIT ?", (limit,))
+            rows = fetch_all(
+                """
+                SELECT * FROM learning_sessions
+                ORDER BY started_at DESC, id DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
+            )
         return [self._row_to_session(row) for row in rows]
 
     def list_sessions_for_date(self, target_date: date) -> list[LearningSession]:

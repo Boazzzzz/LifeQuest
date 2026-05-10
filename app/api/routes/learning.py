@@ -24,8 +24,11 @@ def create_learning_session(payload: LearningSessionCreate) -> LearningSession:
 
 
 @router.get("/sessions", response_model=list[LearningSession])
-def list_learning_sessions(limit: int = Query(default=100, ge=1, le=500)) -> list[LearningSession]:
-    return LearningService().list_sessions(limit=limit)
+def list_learning_sessions(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[LearningSession]:
+    return LearningService().list_sessions(limit=limit, offset=offset)
 
 
 @router.get("/pulse/today", response_model=LearningPulse)

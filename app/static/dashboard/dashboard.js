@@ -1,27 +1,85 @@
 const root = document.getElementById("root");
 const LOCALE = "zh-TW";
 
-const fallbackData = {
-  status: "prototype",
-  date: currentDateString(),
-  pulse: {
-    total_minutes: 75,
-    python_minutes: 45,
-    japanese_minutes: 30,
-    focus_score: 72,
-    tomorrow_priority: "保護一段 Python 練習，再完成一輪日文 Anki。",
+const fallbackOverview = {
+  target_date: currentDateString(),
+  hero: {
+    status: "prototype",
+    headline: "首頁還在接線中，但方向已經很明確。",
+    summary: "這裡會慢慢變成你每天打開後，能立刻理解今天狀態與下一步的控制中心。",
+    focus_score: 0,
+    session_count: 0,
+    tomorrow_priority: "先把最小可完成的一步做出來。",
+    warnings: ["目前無法讀取 live overview，先使用備援內容。"],
+  },
+  learning: {
+    status: "quiet",
+    recommendation: "先完成一小段學習，再讓儀表板開始長出訊號。",
+    pulse: {
+      total_minutes: 0,
+      python_minutes: 0,
+      japanese_minutes: 0,
+      sre_minutes: 0,
+      session_count: 0,
+      focus_score: 0,
+      tomorrow_priority: "先把最小可完成的一步做出來。",
+      integration_warnings: [],
+    },
+    recent_sessions: [],
   },
   subscriptions: {
-    active_subscription_count: 3,
-    totals_by_currency: { USD: 20, JPY: 1499, TWD: 75 },
-    upcoming_charges: [
-      { name: "範例訂閱", currency: "TWD", amount: 75, next_charge_date: "2026-05-28" },
-      { name: "ChatGPT Plus", currency: "USD", amount: 20, next_charge_date: null },
-      { name: "office365", currency: "JPY", amount: 1499, next_charge_date: null },
-    ],
+    status: "quiet",
+    next_charge_name: null,
+    next_charge_date: null,
+    overview: {
+      active_subscription_count: 0,
+      paused_subscription_count: 0,
+      cancelled_subscription_count: 0,
+      missing_schedule_count: 0,
+      totals_by_currency: {},
+      upcoming_charges: [],
+    },
   },
-  warnings: [
-    "這個首頁目前還是產品方向原型；有些卡片會先用備援資料，等每個後端模組穩定後再完全接上。",
+  automations: {
+    total_count: 0,
+    enabled_count: 0,
+    healthy_count: 0,
+    needs_attention_count: 0,
+    definitions: [],
+    recent_runs: [],
+  },
+  knowledge: {
+    note_count: 0,
+    follow_up_count: 0,
+    recent_notes: [],
+  },
+  attention_items: [
+    {
+      severity: "info",
+      title: "目前使用備援首頁",
+      detail: "後端 overview API 還沒回來時，這裡會先保留一個可閱讀的骨架。",
+      href: "/docs",
+    },
+  ],
+  launchpad: [
+    {
+      key: "learning",
+      title: "學習",
+      summary: "先從學習切片開始讓控制中心長出真實感。",
+      href: "/japanese",
+      metric: "0 分鐘",
+      status_label: "quiet",
+    },
+  ],
+  recent_activity: [
+    {
+      id: "fallback-activity-1",
+      title: "Overview API is not available yet",
+      detail: "This area will show a living stream of learning, subscriptions, automation, and knowledge events.",
+      href: "/docs",
+      tone: "neutral",
+      occurred_at: new Date().toISOString(),
+    },
   ],
 };
 
@@ -30,24 +88,22 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function loadDashboard() {
-  const [health, pulse, subscriptions] = await Promise.all([
-    safeFetchJson("/health"),
-    safeFetchJson("/learning/pulse/today"),
-    safeFetchJson("/subscriptions/overview/monthly?days_ahead=35"),
-  ]);
-
-  const data = {
-    ...fallbackData,
-    status: health?.status === "ok" ? "live" : "prototype",
-    pulse: mergePulse(pulse),
-    subscriptions: mergeSubscriptions(subscriptions),
-  };
-  render(data);
+  const overview = (await safeFetchJson("/dashboard/overview")) ?? fallbackOverview;
+  render(overview);
 }
 
 function render(data) {
-  const totals = Object.entries(data.subscriptions.totals_by_currency);
-  const upcomingCharges = data.subscriptions.upcoming_charges.slice(0, 4);
+  const pulse = data.learning.pulse ?? fallbackOverview.learning.pulse;
+  const subscriptionOverview = data.subscriptions.overview ?? fallbackOverview.subscriptions.overview;
+  const totals = Object.entries(subscriptionOverview.totals_by_currency ?? {});
+  const upcomingCharges = (subscriptionOverview.upcoming_charges ?? []).slice(0, 4);
+  const attentionItems = data.attention_items ?? [];
+  const launchpad = data.launchpad ?? [];
+  const recentSessions = data.learning.recent_sessions ?? [];
+  const recentNotes = data.knowledge.recent_notes ?? [];
+  const recentRuns = data.automations.recent_runs ?? [];
+  const automationDefs = data.automations.definitions ?? [];
+  const recentActivity = data.recent_activity ?? [];
 
   root.innerHTML = `
     <main class="shell">
@@ -56,149 +112,180 @@ function render(data) {
           <span class="brand-mark" aria-hidden="true"></span>
           <div>
             <div class="brand-name">LifeQuest</div>
-            <div class="brand-subtitle">學習、生活管理、知識與自動化的個人控制中心。</div>
+            <div class="brand-subtitle">用一個安靜但有判斷力的首頁，管理學習、生活、知識與自動化。</div>
           </div>
         </div>
         <nav class="nav-pills">
-          <a class="pill" href="#modules">模組</a>
-          <a class="pill" href="#today">今天</a>
-          <a class="pill" href="#money">生活管理</a>
-          <a class="pill" href="#vision">路線圖</a>
+          <a class="pill" href="#attention">注意事項</a>
+          <a class="pill" href="#launchpad">模組入口</a>
+          <a class="pill" href="#recent">近期訊號</a>
+          <a class="pill" href="/docs">API</a>
         </nav>
       </header>
 
       <section class="hero" data-reveal data-delay="1">
         <div>
-          <p class="eyebrow">產品方向</p>
-          <h1 class="hero-title">一個你真的會想打開的生活作業系統。</h1>
-          <p class="hero-text">
-            LifeQuest 最適合保持冷靜又有主見：後端負責保存真實訊號，前端負責幫你快速判斷今天該注意什麼。
-          </p>
+          <p class="eyebrow">Daily Control Center</p>
+          <h1 class="hero-title">${escapeHtml(data.hero.headline)}</h1>
+          <p class="hero-text">${escapeHtml(data.hero.summary)}</p>
+          <div class="hero-pill-row">
+            ${heroPill("今日日期", formatShortDate(data.target_date))}
+            ${heroPill("專注分數", String(pulse.focus_score ?? 0))}
+            ${heroPill("學習紀錄", `${pulse.session_count ?? 0} 筆`)}
+          </div>
           <div class="hero-actions">
-            <a class="button button-primary" href="/docs">開啟 API 文件</a>
-            <a class="button button-secondary" href="/life-admin/subscriptions">訂閱管理</a>
-            <a class="button button-secondary" href="/japanese">日文學習</a>
+            <a class="button button-primary" href="/japanese">打開學習切片</a>
+            <a class="button button-secondary" href="/nightly">睡前自學回顧</a>
+            <a class="button button-secondary" href="/life-admin/subscriptions">檢查生活管理</a>
+            <a class="button button-secondary" href="/review/weekly">本週回顧</a>
+            <a class="button button-secondary" href="/docs">瀏覽 API</a>
           </div>
         </div>
         <aside class="hero-side">
           <section class="glass-card">
             <div class="status-line">
               <div>
-                <div class="mini-label">儀表板狀態</div>
-                <strong>${data.status === "live" ? "已連上後端" : "原型模式"}</strong>
+                <div class="mini-label">首頁狀態</div>
+                <strong>${data.hero.status === "live" ? "Live overview" : "Prototype fallback"}</strong>
               </div>
-              <span class="status-chip">${data.status === "live" ? "上線" : "備援"}</span>
+              <span class="status-chip">${data.hero.status === "live" ? "已連線" : "備援"}</span>
             </div>
-            <div class="prototype-banner">${escapeHtml(data.warnings[0])}</div>
+            <div class="prototype-banner">${escapeHtml(data.hero.tomorrow_priority)}</div>
+            ${renderWarnings(data.hero.warnings ?? [])}
           </section>
           <section class="hero-mini-grid">
-            ${miniCard("今天", formatShortDate(data.date))}
-            ${miniCard("專注", `${data.pulse.focus_score}`)}
-            ${miniCard("訂閱", `${data.subscriptions.active_subscription_count}`)}
-            ${miniCard("模組", "5")}
+            ${miniCard("使用中訂閱", String(subscriptionOverview.active_subscription_count ?? 0))}
+            ${miniCard("自動化", String(data.automations.total_count ?? 0))}
+            ${miniCard("知識筆記", String(data.knowledge.note_count ?? 0))}
+            ${miniCard("待注意", String(attentionItems.length))}
           </section>
         </aside>
       </section>
 
       <section class="content-grid">
         <div class="metrics-grid" data-reveal data-delay="1">
-          ${metricCard("學習脈搏", `${data.pulse.total_minutes} 分鐘`, "今天記錄到的 Python 與日文學習時間。", "今天")}
-          ${metricCard("Python", `${data.pulse.python_minutes} 分鐘`, "實作、腳本與自動化練習時間。", "建造")}
-          ${metricCard("日文", `${data.pulse.japanese_minutes} 分鐘`, "Anki、閱讀、聽力或其他日文練習。", "複習")}
-          ${metricCard("生活管理", `${totals.length} 種幣別`, "把固定支出集中在同一個地方看。", "掌控")}
+          ${metricCard("學習脈搏", `${pulse.total_minutes ?? 0} 分鐘`, "今天累積的總學習時間。", statusLabel(data.learning.status))}
+          ${metricCard("Python", `${pulse.python_minutes ?? 0} 分鐘`, "實作、腳本與開發練習。", "build")}
+          ${metricCard("日文", `${pulse.japanese_minutes ?? 0} 分鐘`, "Anki、閱讀或複習時間。", "review")}
+          ${metricCard("SRE", `${pulse.sre_minutes ?? 0} 分鐘`, "Linux、網路、可靠性與維運練習。", "ops")}
+          ${metricCard("固定支出", `${subscriptionOverview.active_subscription_count ?? 0} 筆`, "目前仍在使用中的訂閱。", statusLabel(data.subscriptions.status))}
         </div>
 
-        <section class="panel" id="modules" data-reveal data-delay="2">
+        <div class="two-up">
+          <section class="panel" id="attention" data-reveal data-delay="2">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">今天值得注意</h2>
+                <p class="section-subtitle">首頁第一件事不是展示資料，而是幫你縮小注意力範圍。</p>
+              </div>
+            </div>
+            <div class="attention-list">
+              ${attentionItems.map((item) => attentionRow(item)).join("")}
+            </div>
+          </section>
+
+          <section class="panel" id="launchpad" data-reveal data-delay="2">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">下一步去哪裡</h2>
+                <p class="section-subtitle">每個模組都應該像一個明確入口，而不是模糊的待辦集合。</p>
+              </div>
+            </div>
+            <div class="launchpad-grid">
+              ${launchpad.map((item) => launchpadCard(item)).join("")}
+            </div>
+          </section>
+        </div>
+
+        <div class="two-up" id="recent">
+          <section class="panel" data-reveal data-delay="3">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">近期學習與扣款</h2>
+                <p class="section-subtitle">${escapeHtml(data.learning.recommendation)}</p>
+              </div>
+            </div>
+            <div class="signal-grid">
+              <div>
+                <div class="list-label">近期學習紀錄</div>
+                <div class="list-stack">
+                  ${recentSessions.length ? recentSessions.map((session) => sessionRow(session)).join("") : emptyState("今天還沒有學習紀錄。")}
+                </div>
+              </div>
+              <div>
+                <div class="list-label">近期扣款</div>
+                <div class="list-stack">
+                  ${upcomingCharges.length ? upcomingCharges.map((charge) => chargeRow(charge)).join("") : emptyState("目前沒有已知的近期扣款。")}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" data-reveal data-delay="3">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">知識與自動化訊號</h2>
+                <p class="section-subtitle">這裡會慢慢變成你觀察「有沒有事情在自己運作」的地方。</p>
+              </div>
+            </div>
+            <div class="signal-grid">
+              <div>
+                <div class="list-label">近期知識筆記</div>
+                <div class="list-stack">
+                  ${recentNotes.length ? recentNotes.map((note) => noteRow(note)).join("") : emptyState("還沒有知識筆記，這裡之後會很好用。")}
+                </div>
+              </div>
+              <div>
+                <div class="list-label">最近自動化執行</div>
+                <div class="list-stack">
+                  ${recentRuns.length ? recentRuns.map((run) => automationRunRow(run)).join("") : emptyState("還沒有執行紀錄，先把最常用的一個腳本接進來最划算。")}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section class="panel" data-reveal data-delay="3">
           <div class="section-head">
             <div>
-              <h2 class="section-title">核心模組</h2>
-              <p class="section-subtitle">這個產品會靠幾個清楚的切片長大，而不是一次變成什麼都做的巨大應用。</p>
+              <h2 class="section-title">Recent Activity</h2>
+              <p class="section-subtitle">這一小塊讓首頁開始有「系統正在運作」的流動感，而不只是靜態摘要。</p>
+            </div>
+          </div>
+          <div class="list-stack">
+            ${recentActivity.length ? recentActivity.map((item) => activityRow(item)).join("") : emptyState("最近還沒有 activity 事件。")}
+          </div>
+        </section>
+
+        <section class="panel" data-reveal data-delay="3">
+          <div class="section-head">
+            <div>
+              <h2 class="section-title">模組健康度</h2>
+              <p class="section-subtitle">這一區不求完整，但要讓你一眼知道哪些模組已經開始像產品，而不是資料堆。</p>
             </div>
           </div>
           <div class="module-grid">
-            ${moduleCard("學習", "學習紀錄、Anki、GitHub 活動、進度摘要與回顧循環。", "讓動能看得見。", "tone-learning")}
-            ${moduleCard("生活管理", "訂閱、固定支出，以及那些很小但不該忘記的生活訊號。", "減少腦內雜訊。", "tone-admin")}
-            ${moduleCard("知識", "工作筆記、個人參考資料，以及未來的收件匣與回顧流程。", "讓學到的東西能重複使用。", "tone-knowledge")}
-            ${moduleCard("自動化", "既有腳本、執行歷史與操作可觀測性。", "先觀察，再重寫。", "tone-automation")}
-            ${moduleCard("週回顧", "把紀錄轉成選擇的人類友善摘要頁。", "把資料變成方向。", "tone-review")}
+            ${moduleCard("學習", `今天 ${pulse.total_minutes ?? 0} 分鐘，${pulse.session_count ?? 0} 筆紀錄。`, statusLabel(data.learning.status), "tone-learning")}
+            ${moduleCard("生活管理", `使用中 ${subscriptionOverview.active_subscription_count ?? 0} 筆，待補排程 ${subscriptionOverview.missing_schedule_count ?? 0} 筆。`, statusLabel(data.subscriptions.status), "tone-admin")}
+            ${moduleCard("知識", `目前 ${data.knowledge.note_count ?? 0} 則筆記，待跟進 ${data.knowledge.follow_up_count ?? 0} 則。`, "capturing", "tone-knowledge")}
+            ${moduleCard("自動化", `共 ${data.automations.total_count ?? 0} 個，自動判定待留意 ${data.automations.needs_attention_count ?? 0} 個。`, data.automations.needs_attention_count ? "attention" : "steady", "tone-automation")}
+            ${moduleCard("週回顧", "現在已經有專屬頁面，開始把本週訊號變成下週方向。", "live", "tone-review")}
           </div>
-        </section>
-
-        <div class="two-up" id="today">
-          <section class="panel" data-reveal data-delay="2">
-            <div class="section-head">
-              <div>
-                <h2 class="section-title">今日流程</h2>
-                <p class="section-subtitle">首頁應該很快回答一件事：今天什麼最值得注意？</p>
-              </div>
-            </div>
-            <div class="checklist">
-              ${checkItem("保護學習區塊", `Python ${data.pulse.python_minutes} 分鐘、日文 ${data.pulse.japanese_minutes} 分鐘，打開就看得到。`)}
-              ${checkItem("檢查明日優先事項", localizePriority(data.pulse.tomorrow_priority, data.pulse))}
-              ${checkItem("掃過固定支出", upcomingCharges.length ? `接下來的檢視區間內有 ${upcomingCharges.length} 筆訂閱項目。` : "有些訂閱還缺扣款日期。") }
-              ${checkItem("完成閉環", "週回顧之後應該能把學習、生活管理、自動化與知識整理接在一起。")}
-            </div>
-          </section>
-
-          <section class="panel" data-reveal data-delay="3">
-            <div class="section-head">
-              <div>
-                <h2 class="section-title">前端承諾</h2>
-                <p class="section-subtitle">這個 UI 應該像控制中心，而不是一張被硬塞按鈕的試算表。</p>
-              </div>
-            </div>
-            <div class="feed-list">
-              ${feedItem("每日首頁", "一個畫面看學習脈搏、生活管理與操作訊號。")}
-              ${feedItem("模組頁", "為學習、生活管理、知識與自動化保留各自的專用視圖。")}
-              ${feedItem("回顧儀式", "未來加一個更安靜的週回顧頁，幫你決定保留、停止或改善什麼。")}
-            </div>
-          </section>
-        </div>
-
-        <div class="two-up" id="money">
-          <section class="panel" data-reveal data-delay="2">
-            <div class="section-head">
-              <div>
-                <h2 class="section-title">生活管理快照</h2>
-                <p class="section-subtitle">固定支出很容易忘記，但忘記通常很貴，所以它們值得被放在這裡。</p>
-              </div>
-            </div>
-            <div class="currency-stack">
-              ${totals.map(([currency, total]) => currencyRow(currency, total)).join("")}
-            </div>
-          </section>
-
-          <section class="panel" data-reveal data-delay="3">
-            <div class="section-head">
-              <div>
-                <h2 class="section-title">近期扣款</h2>
-                <p class="section-subtitle">已知日期要很清楚；未知日期則要讓人一眼知道還沒整理完。</p>
-              </div>
-            </div>
-            <div class="charge-list">
-              ${upcomingCharges.map((charge) => chargeRow(charge)).join("")}
-            </div>
-          </section>
-        </div>
-
-        <section class="panel" id="vision" data-reveal data-delay="3">
-          <div class="section-head">
+          <div class="detail-grid">
             <div>
-              <h2 class="section-title">產品路線圖</h2>
-              <p class="section-subtitle">比較穩的路線是：先讓後端可靠，再做一個值得打開的儀表板，最後補上更豐富的回顧流程。</p>
+              <div class="list-label">自動化定義</div>
+              <div class="list-stack">
+                ${automationDefs.length ? automationDefs.map((item) => automationDefinitionRow(item)).join("") : emptyState("目前還沒有已註冊的自動化。")}
+              </div>
+            </div>
+            <div>
+              <div class="list-label">幣別總覽</div>
+              <div class="list-stack">
+                ${totals.length ? totals.map(([currency, total]) => currencyRow(currency, total)).join("") : emptyState("尚未建立任何訂閱資料。")}
+              </div>
             </div>
           </div>
-          <div class="story-grid">
-            ${timelineCard("第 1 階段", "可靠的後端切片", "每個領域先把捕捉、儲存、列表與摘要 API 做穩。")}
-            ${timelineCard("第 2 階段", "值得打開的首頁", "首頁要用白話解釋今天的學習、金錢、知識與自動化狀態。")}
-            ${timelineCard("第 3 階段", "週回顧", "加入更安靜的頁面，幫你決定這週要保留、停止或改善什麼。")}
-            ${timelineCard("第 4 階段", "可選的遊戲層", "只有在產品本身已經有用之後，才加入任務或 XP。")}
-          </div>
         </section>
-
-        <p class="footer-note" data-reveal data-delay="3">
-          這個首頁目前故意先作為產品方向原型，讓我們能早點看到形狀，再用你的真實使用慢慢長大。
-        </p>
       </section>
     </main>
   `;
@@ -216,30 +303,8 @@ async function safeFetchJson(url) {
   }
 }
 
-function mergePulse(pulse) {
-  if (!pulse) {
-    return fallbackData.pulse;
-  }
-  return {
-    total_minutes: pulse.total_minutes ?? fallbackData.pulse.total_minutes,
-    python_minutes: pulse.python_minutes ?? 0,
-    japanese_minutes: pulse.japanese_minutes ?? 0,
-    focus_score: pulse.focus_score ?? fallbackData.pulse.focus_score,
-    tomorrow_priority: pulse.tomorrow_priority ?? fallbackData.pulse.tomorrow_priority,
-  };
-}
-
-function mergeSubscriptions(subscriptions) {
-  if (!subscriptions) {
-    return fallbackData.subscriptions;
-  }
-  return {
-    active_subscription_count: subscriptions.active_subscription_count ?? fallbackData.subscriptions.active_subscription_count,
-    totals_by_currency: subscriptions.totals_by_currency ?? fallbackData.subscriptions.totals_by_currency,
-    upcoming_charges: Array.isArray(subscriptions.upcoming_charges)
-      ? subscriptions.upcoming_charges
-      : fallbackData.subscriptions.upcoming_charges,
-  };
+function heroPill(label, value) {
+  return `<div class="hero-pill"><span class="mini-label">${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
 }
 
 function miniCard(label, value) {
@@ -251,15 +316,108 @@ function metricCard(label, value, text, trend) {
 }
 
 function moduleCard(title, text, footer, toneClass) {
-  return `<article class="module-card ${toneClass}"><div class="module-kicker">核心切片</div><h3 class="module-title">${escapeHtml(title)}</h3><p class="module-text">${escapeHtml(text)}</p><div class="module-footer">${escapeHtml(footer)}</div></article>`;
+  return `<article class="module-card ${toneClass}"><div class="module-kicker">Module</div><h3 class="module-title">${escapeHtml(title)}</h3><p class="module-text">${escapeHtml(text)}</p><div class="module-footer">${escapeHtml(footer)}</div></article>`;
 }
 
-function checkItem(title, meta) {
-  return `<article class="check-item"><div class="item-title">${escapeHtml(title)}</div><div class="item-meta">${escapeHtml(meta)}</div></article>`;
+function launchpadCard(item) {
+  return `
+    <a class="launchpad-card" href="${escapeAttribute(item.href)}">
+      <div class="module-kicker">${escapeHtml(item.status_label)}</div>
+      <div class="launchpad-top">
+        <h3 class="module-title">${escapeHtml(item.title)}</h3>
+        <span class="metric-trend">${escapeHtml(item.metric)}</span>
+      </div>
+      <p class="module-text">${escapeHtml(item.summary)}</p>
+    </a>
+  `;
 }
 
-function feedItem(title, meta) {
-  return `<article class="feed-item"><div class="item-title">${escapeHtml(title)}</div><div class="item-meta">${escapeHtml(meta)}</div></article>`;
+function attentionRow(item) {
+  return `
+    <a class="attention-item" href="${escapeAttribute(item.href || "/dashboard")}">
+      <span class="attention-badge attention-${escapeAttribute(item.severity)}">${escapeHtml(item.severity)}</span>
+      <div>
+        <div class="item-title">${escapeHtml(item.title)}</div>
+        <div class="item-meta">${escapeHtml(item.detail)}</div>
+      </div>
+    </a>
+  `;
+}
+
+function sessionRow(session) {
+  return `
+    <article class="signal-row">
+      <div>
+        <div class="item-title">${escapeHtml(localizeSubject(session.subject))}</div>
+        <div class="item-meta">${escapeHtml(session.summary || "未提供摘要")}</div>
+      </div>
+      <div class="signal-side">
+        <strong>${escapeHtml(`${session.duration_minutes} 分鐘`)}</strong>
+        <span class="item-meta">${escapeHtml(formatDateTime(session.started_at))}</span>
+      </div>
+    </article>
+  `;
+}
+
+function noteRow(note) {
+  return `
+    <article class="signal-row">
+      <div>
+        <div class="item-title">${escapeHtml(note.title)}</div>
+        <div class="item-meta">${escapeHtml(localizeCategory(note.category))}${note.follow_up ? " · 有 follow-up" : ""}</div>
+      </div>
+      <div class="signal-side">
+        <strong>${escapeHtml(formatDateTime(note.created_at))}</strong>
+        <span class="item-meta">${escapeHtml((note.tags ?? []).slice(0, 2).join(" / ") || "筆記")}</span>
+      </div>
+    </article>
+  `;
+}
+
+function automationRunRow(run) {
+  return `
+    <article class="signal-row">
+      <div>
+        <div class="item-title">${escapeHtml(run.automation_name)}</div>
+        <div class="item-meta">${escapeHtml(run.summary || "沒有摘要")}</div>
+      </div>
+      <div class="signal-side">
+        <strong>${escapeHtml(run.status)}</strong>
+        <span class="item-meta">${escapeHtml(formatDateTime(run.started_at))}</span>
+      </div>
+    </article>
+  `;
+}
+
+function automationDefinitionRow(item) {
+  const lastRun = item.last_run_at ? formatDateTime(item.last_run_at) : "尚未執行";
+  return `
+    <article class="signal-row">
+      <div>
+        <div class="item-title">${escapeHtml(item.name)}</div>
+        <div class="item-meta">${escapeHtml(item.category)} · ${escapeHtml(item.enabled ? "enabled" : "disabled")}</div>
+      </div>
+      <div class="signal-side">
+        <strong>${escapeHtml(item.last_run_status || "pending")}</strong>
+        <span class="item-meta">${escapeHtml(lastRun)}</span>
+      </div>
+    </article>
+  `;
+}
+
+function activityRow(item) {
+  return `
+    <a class="activity-row" href="${escapeAttribute(item.href || "/dashboard")}">
+      <div>
+        <div class="item-title">${escapeHtml(item.title)}</div>
+        <div class="item-meta">${escapeHtml(item.detail)}</div>
+      </div>
+      <div class="signal-side">
+        <span class="activity-tone activity-tone-${escapeAttribute(item.tone || "neutral")}">${escapeHtml(item.tone || "neutral")}</span>
+        <span class="item-meta">${escapeHtml(formatDateTime(item.occurred_at))}</span>
+      </div>
+    </a>
+  `;
 }
 
 function currencyRow(currency, total) {
@@ -268,21 +426,73 @@ function currencyRow(currency, total) {
 
 function chargeRow(charge) {
   const dateLabel = charge.next_charge_date ? formatShortDate(charge.next_charge_date) : "缺少日期";
-  return `<div class="charge-row"><div><div class="charge-name">${escapeHtml(charge.name)}</div><div class="item-meta">${escapeHtml(`${charge.currency} ${Number(charge.amount).toFixed(2)}`)}</div></div><span class="charge-date">${escapeHtml(dateLabel)}</span></div>`;
+  const detail = charge.days_until_charge === 0 ? "今天扣款" : `${charge.days_until_charge} 天後`;
+  return `
+    <article class="signal-row">
+      <div>
+        <div class="item-title">${escapeHtml(charge.name)}</div>
+        <div class="item-meta">${escapeHtml(`${charge.currency} ${Number(charge.amount).toFixed(2)} · ${detail}`)}</div>
+      </div>
+      <div class="signal-side">
+        <strong>${escapeHtml(dateLabel)}</strong>
+        <span class="item-meta">${escapeHtml(charge.schedule_summary || "訂閱")}</span>
+      </div>
+    </article>
+  `;
 }
 
-function timelineCard(step, title, copy) {
-  return `<article class="timeline-note"><div class="timeline-step">${escapeHtml(step)}</div><div class="timeline-title">${escapeHtml(title)}</div><div class="timeline-copy">${escapeHtml(copy)}</div></article>`;
+function renderWarnings(warnings) {
+  if (!warnings.length) {
+    return "";
+  }
+  return `<div class="warning-list">${warnings.map((warning) => `<div class="warning-row">${escapeHtml(warning)}</div>`).join("")}</div>`;
 }
 
-function localizePriority(priority, pulse) {
-  if (priority && containsCjk(priority)) {
-    return priority;
+function emptyState(text) {
+  return `<div class="empty-state">${escapeHtml(text)}</div>`;
+}
+
+function statusLabel(value) {
+  switch (value) {
+    case "strong":
+      return "strong";
+    case "active":
+      return "active";
+    case "needs_review":
+      return "needs review";
+    case "scheduled":
+      return "scheduled";
+    case "quiet":
+      return "quiet";
+    default:
+      return String(value || "live");
   }
-  if (!pulse.python_minutes && !pulse.japanese_minutes) {
-    return "明天先排一段短學習區塊，把節奏接回來。";
+}
+
+function localizeSubject(subject) {
+  if (subject === "python") {
+    return "Python";
   }
-  return "明天先保護一段 Python 自動化練習，再完成一輪日文 Anki。";
+  if (subject === "japanese") {
+    return "日文";
+  }
+  return subject || "學習";
+}
+
+function localizeCategory(category) {
+  const labels = {
+    linux: "Linux",
+    networking: "Networking",
+    docker: "Docker",
+    nginx: "Nginx",
+    database: "Database",
+    security: "Security",
+    monitoring: "Monitoring",
+    cloud: "Cloud",
+    automation: "Automation",
+    other: "Other",
+  };
+  return labels[category] || category || "Note";
 }
 
 function currentDateString() {
@@ -295,8 +505,17 @@ function formatShortDate(value) {
   return new Date(`${value}T00:00:00`).toLocaleDateString(LOCALE, { month: "short", day: "numeric" });
 }
 
-function containsCjk(value) {
-  return /[\u3400-\u9fff]/.test(String(value));
+function formatDateTime(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "未知時間";
+  }
+  return parsed.toLocaleString(LOCALE, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function escapeHtml(value) {
@@ -306,4 +525,8 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value);
 }

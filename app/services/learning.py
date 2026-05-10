@@ -62,13 +62,18 @@ class LearningService:
                 event_type=ActivityEventType.learning_session_created,
                 subject=session.subject,
                 source=session.source.value,
-                payload={"session_id": session.id, "duration_minutes": session.duration_minutes},
+                payload={
+                    "session_id": session.id,
+                    "subject": session.subject.value,
+                    "duration_minutes": session.duration_minutes,
+                    "summary": session.summary,
+                },
             )
         )
         return session
 
-    def list_sessions(self, limit: int = 100) -> list[LearningSession]:
-        return self.learning_repository.list_sessions(limit=limit)
+    def list_sessions(self, limit: int = 100, offset: int = 0) -> list[LearningSession]:
+        return self.learning_repository.list_sessions(limit=limit, offset=offset)
 
     async def build_today_pulse(self) -> LearningPulse:
         return await self.build_pulse(date.today())
@@ -273,10 +278,14 @@ class LearningService:
         japanese_minutes = sum(
             session.duration_minutes for session in sessions if session.subject == LearningSubject.japanese
         )
-        total_minutes = python_minutes + japanese_minutes
+        sre_minutes = sum(
+            session.duration_minutes for session in sessions if session.subject == LearningSubject.sre
+        )
+        total_minutes = python_minutes + japanese_minutes + sre_minutes
         focus_score = self._calculate_focus_score(
             python_minutes=python_minutes,
             japanese_minutes=japanese_minutes,
+            sre_minutes=sre_minutes,
             anki_reviews=anki_stats.reviews,
             github_commits=github_stats.python_commits,
         )
@@ -285,6 +294,7 @@ class LearningService:
             date=target_date,
             python_minutes=python_minutes,
             japanese_minutes=japanese_minutes,
+            sre_minutes=sre_minutes,
             total_minutes=total_minutes,
             session_count=len(sessions),
             anki_reviews=anki_stats.reviews,
@@ -298,10 +308,11 @@ class LearningService:
             summary=self._build_summary(
                 python_minutes,
                 japanese_minutes,
+                sre_minutes,
                 anki_stats.reviews,
                 github_stats.python_commits,
             ),
-            tomorrow_priority=self._build_tomorrow_priority(python_minutes, japanese_minutes),
+            tomorrow_priority=self._build_tomorrow_priority(python_minutes, japanese_minutes, sre_minutes),
             integration_warnings=integration_warnings,
         )
 
@@ -476,33 +487,46 @@ class LearningService:
         self,
         python_minutes: int,
         japanese_minutes: int,
+        sre_minutes: int,
         anki_reviews: int,
         github_commits: int,
     ) -> int:
         score = 0
         score += min(python_minutes, 90) // 3
         score += min(japanese_minutes, 90) // 3
+        score += min(sre_minutes, 90) // 3
         score += min(anki_reviews, 100) // 5
         score += min(github_commits, 5) * 4
         return min(score, 100)
 
-    def _build_summary(self, python_minutes: int, japanese_minutes: int, anki_reviews: int, github_commits: int) -> str:
+    def _build_summary(
+        self,
+        python_minutes: int,
+        japanese_minutes: int,
+        sre_minutes: int,
+        anki_reviews: int,
+        github_commits: int,
+    ) -> str:
         parts = []
         if python_minutes:
             parts.append(f"Python {python_minutes} min")
         if japanese_minutes:
             parts.append(f"Japanese {japanese_minutes} min")
+        if sre_minutes:
+            parts.append(f"SRE {sre_minutes} min")
         if anki_reviews:
             parts.append(f"Anki {anki_reviews} reviews")
         if github_commits:
             parts.append(f"GitHub {github_commits} commits")
         return ", ".join(parts) if parts else "No learning activity recorded yet."
 
-    def _build_tomorrow_priority(self, python_minutes: int, japanese_minutes: int) -> str:
-        if python_minutes == 0 and japanese_minutes == 0:
-            return "Log one short Python session and one Anki review block."
+    def _build_tomorrow_priority(self, python_minutes: int, japanese_minutes: int, sre_minutes: int) -> str:
+        if python_minutes == 0 and japanese_minutes == 0 and sre_minutes == 0:
+            return "Log one short self-learning session before bed."
         if python_minutes < japanese_minutes:
             return "Prioritize one focused Python practice block."
+        if sre_minutes == 0:
+            return "Prioritize one SRE/Linux note or lab."
         if japanese_minutes < python_minutes:
             return "Prioritize Anki reviews and one N3 grammar block."
-        return "Keep balance: one Python exercise and one Japanese review block."
+        return "Keep balance: one Python exercise, one Japanese review block, and one SRE note."

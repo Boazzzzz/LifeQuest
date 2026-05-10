@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     anki_api_version: int = 6
     anki_timeout_seconds: float = 5.0
     anki_decks: str = ""
-    anki_desktop_path: str = r"C:\Users\boaz0\AppData\Local\Programs\Anki\anki.exe"
+    anki_desktop_path: Path | None = None
 
     github_enabled: bool = False
     github_token: str | None = None

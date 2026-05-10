@@ -319,6 +319,7 @@ ANKI_CONNECT_URL=http://127.0.0.1:8765
 ANKI_API_VERSION=6
 ANKI_TIMEOUT_SECONDS=5
 ANKI_DECKS=
+ANKI_DESKTOP_PATH=
 
 GITHUB_ENABLED=false
 GITHUB_TOKEN=
@@ -473,6 +474,8 @@ Example task commands:
 .venv\Scripts\python.exe -m app.cli automation run-scheduled open-anki
 .venv\Scripts\python.exe -m app.cli automation run-scheduled anki-daily
 ```
+
+If you want to use `open-anki`, set `ANKI_DESKTOP_PATH` in `.env` to your local Anki executable path.
 
 ## Subscriptions
 

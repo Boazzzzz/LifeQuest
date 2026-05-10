@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 class LearningSubject(StrEnum):
     python = "python"
     japanese = "japanese"
+    sre = "sre"
 
 
 class LearningSource(StrEnum):
@@ -58,6 +59,7 @@ class LearningPulse(BaseModel):
     date: date
     python_minutes: int = 0
     japanese_minutes: int = 0
+    sre_minutes: int = 0
     total_minutes: int = 0
     session_count: int = 0
     anki_reviews: int = 0

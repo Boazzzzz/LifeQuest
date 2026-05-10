@@ -200,6 +200,17 @@ def test_scheduled_automation_service_runs_open_anki_and_records_run(tmp_path, m
     assert definitions[0].last_run_status == AutomationRunStatus.success
 
 
+def test_scheduled_automation_service_reports_missing_anki_path(tmp_path, monkeypatch):
+    use_temp_database(tmp_path, monkeypatch)
+    monkeypatch.setattr("app.core.config.settings.anki_desktop_path", None)
+
+    service = ScheduledAutomationService()
+    run = service.run("open-anki")
+
+    assert run.status == AutomationRunStatus.failed
+    assert run.error_message == "ANKI_DESKTOP_PATH is not configured."
+
+
 def test_scheduled_automation_cli_lists_and_runs_anki_daily(tmp_path, monkeypatch, capsys):
     use_temp_database(tmp_path, monkeypatch)
     monkeypatch.setattr("app.core.config.settings.anki_enabled", False)

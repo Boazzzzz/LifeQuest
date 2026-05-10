@@ -37,6 +37,56 @@ def test_learning_service_creates_session_and_pulse(tmp_path, monkeypatch):
     assert sessions[0].duration_minutes == 45
 
 
+def test_learning_pulse_counts_sre_sessions(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.config.settings.anki_enabled", False)
+    monkeypatch.setattr("app.core.config.settings.github_enabled", False)
+    initialize_database()
+
+    service = LearningService()
+    service.create_session(
+        LearningSessionCreate(
+            subject=LearningSubject.sre,
+            duration_minutes=30,
+            summary="Practiced Linux incident triage.",
+        )
+    )
+
+    pulse = __import__("asyncio").run(service.build_today_pulse())
+
+    assert pulse.sre_minutes == 30
+    assert pulse.total_minutes == 30
+    assert "SRE 30 min" in pulse.summary
+
+
+def test_learning_service_lists_sessions_with_limit_and_offset(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
+    initialize_database()
+
+    service = LearningService()
+    for started_at, summary in [
+        (datetime(2026, 5, 7, 9, 0, tzinfo=timezone.utc), "Oldest session"),
+        (datetime(2026, 5, 8, 9, 0, tzinfo=timezone.utc), "Middle session"),
+        (datetime(2026, 5, 9, 9, 0, tzinfo=timezone.utc), "Newest session"),
+    ]:
+        service.create_session(
+            LearningSessionCreate(
+                subject=LearningSubject.python,
+                duration_minutes=30,
+                summary=summary,
+                started_at=started_at,
+            )
+        )
+
+    first_page = service.list_sessions(limit=2, offset=0)
+    second_page = service.list_sessions(limit=2, offset=2)
+
+    assert [session.summary for session in first_page] == ["Newest session", "Middle session"]
+    assert [session.summary for session in second_page] == ["Oldest session"]
+
+
 def test_learning_pulse_includes_anki_stats(tmp_path, monkeypatch):
     monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
     monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
@@ -489,6 +539,20 @@ def test_japanese_dashboard_page_serves_html(tmp_path, monkeypatch):
     assert 'id="root"' in response.text
 
 
+def test_nightly_checkin_page_serves_html(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
+
+    with TestClient(app) as client:
+        response = client.get("/nightly")
+        alias_response = client.get("/checkin")
+
+    assert response.status_code == 200
+    assert alias_response.status_code == 200
+    assert "LifeQuest 睡前自學回顧" in response.text
+    assert 'id="root"' in response.text
+
+
 def test_cli_log_records_learning_session(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
     monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
@@ -504,6 +568,34 @@ def test_cli_log_records_learning_session(tmp_path, monkeypatch, capsys):
     assert len(sessions) == 1
     assert sessions[0].summary == "N3 grammar"
     assert sessions[0].tags == ["n3"]
+
+
+def test_learning_sessions_api_supports_offset_pagination(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
+    initialize_database()
+
+    with TestClient(app) as client:
+        for started_at, summary in [
+            ("2026-05-07T09:00:00Z", "Oldest session"),
+            ("2026-05-08T09:00:00Z", "Middle session"),
+            ("2026-05-09T09:00:00Z", "Newest session"),
+        ]:
+            response = client.post(
+                "/learning/sessions",
+                json={
+                    "subject": "python",
+                    "duration_minutes": 20,
+                    "summary": summary,
+                    "started_at": started_at,
+                },
+            )
+            assert response.status_code == 200
+
+        response = client.get("/learning/sessions", params={"limit": 1, "offset": 1})
+
+    assert response.status_code == 200
+    assert [session["summary"] for session in response.json()] == ["Middle session"]
 
 
 def test_cli_anki_status_reports_disabled(tmp_path, monkeypatch, capsys):
