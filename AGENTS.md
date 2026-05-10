@@ -69,6 +69,27 @@ Stop and report back to the user before continuing if any of the following is tr
 - If a branch is already checked out by another worktree, do not attempt to reuse it in this checkout. Use another worktree or handoff instead.
 - If this chat is attached to the main worktree, treat it as the integration thread unless the user explicitly says otherwise.
 
+## Local Folder Layout
+
+Use a consistent local folder layout so worktrees are easy to find and do not get mixed into the main checkout.
+
+- Main workspace: `F:\Documents\projects\LifeQuest`
+- Shared worktree root: `F:\Documents\projects\_worktrees\LifeQuest`
+- Integration worktree example: `F:\Documents\projects\_worktrees\LifeQuest\integration`
+- Feature worktree examples:
+  - `F:\Documents\projects\_worktrees\LifeQuest\learning-feature`
+  - `F:\Documents\projects\_worktrees\LifeQuest\dashboard-ui`
+  - `F:\Documents\projects\_worktrees\LifeQuest\subscription-fix`
+
+Layout rules:
+
+- Keep the main `LifeQuest` folder reserved for the primary integration checkout.
+- Create additional worktrees under `F:\Documents\projects\_worktrees\LifeQuest\`.
+- Do not create nested worktrees inside the main repo directory.
+- Do not create nested worktrees inside another worktree.
+- Do not scatter alternate checkouts as sibling folders such as `LifeQuest-2` or `LifeQuest-test`.
+- Name worktree folders by role or feature focus so their purpose is obvious.
+
 ## File Ownership Guidance
 
 To reduce collisions, prefer these ownership boundaries:
