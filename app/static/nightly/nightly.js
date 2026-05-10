@@ -92,7 +92,15 @@ async function loadNightly() {
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
   if (!response.ok) {
-    throw new Error(`API 請求失敗：${response.status}`);
+    const responseText = await response.text();
+    let detail = responseText.trim();
+    try {
+      const payload = JSON.parse(responseText);
+      detail = String(payload.detail || payload.error || detail).trim();
+    } catch {
+      // Non-JSON errors still carry useful text from the server.
+    }
+    throw new Error(`API 請求失敗：${response.status}${detail ? `，${detail}` : ""}`);
   }
   return response.json();
 }
