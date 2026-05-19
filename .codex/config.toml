@@ -1,0 +1,8 @@
+# Repository-specific Codex defaults for LifeQuest.
+# Keep these settings conservative and durable across threads.
+
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+
+[windows]
+sandbox = "unelevated"

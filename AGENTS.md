@@ -16,6 +16,8 @@ At the start of a thread, read this file before making meaningful edits.
 4. Do not assume another thread's branch is safe to reuse.
 5. Never run live parallel threads against the same checkout when both may edit files.
 6. Prefer small, reviewable commits and branch-scoped pull requests.
+7. Completed work must be committed. Do not leave finished implementation, review-driven fixes, or workflow changes only as unstaged or uncommitted local edits.
+8. This commit rule applies to every branch, not only `main`. Treat feature, optimization, integration-sandbox, and other working branches the same way.
 
 ## Stop Conditions
 
@@ -42,6 +44,28 @@ Stop and report back to the user before continuing if any of the following is tr
 - Restrictions:
   - do not start large feature development here
   - do not take ownership of feature branches unless the user explicitly redirects this thread
+
+### Integration sandbox thread
+
+- Expected branch: `codex/integration`
+- Responsibilities:
+  - pre-integration diff review
+  - isolated smoke testing before final integration
+  - merge rehearsal or temporary integration experiments
+- Restrictions:
+  - do not treat this branch as the canonical integration branch
+  - final merge-ready review, commit, and push should happen on `main` unless the user explicitly redirects
+
+### Function development thread
+
+- Expected branch: `function-development`
+- Responsibilities:
+  - active feature development when the user intentionally wants a broader working branch
+  - implementation spikes that still need a dedicated worktree
+- Restrictions:
+  - treat this as a legacy/general-purpose branch, not the preferred default for new feature lines
+  - for new substantial work, prefer a feature-specific `codex/...` branch instead
+  - if this branch is used, define the scope clearly in the opening prompt before editing
 
 ### Project optimization thread
 
@@ -77,6 +101,7 @@ Use a consistent local folder layout so worktrees are easy to find and do not ge
 - Shared worktree root: `F:\Documents\projects\_worktrees\LifeQuest`
 - Integration worktree example: `F:\Documents\projects\_worktrees\LifeQuest\integration`
 - Feature worktree examples:
+  - `F:\Documents\projects\_worktrees\LifeQuest\function-development`
   - `F:\Documents\projects\_worktrees\LifeQuest\learning-feature`
   - `F:\Documents\projects\_worktrees\LifeQuest\dashboard-ui`
   - `F:\Documents\projects\_worktrees\LifeQuest\subscription-fix`
@@ -89,6 +114,41 @@ Layout rules:
 - Do not create nested worktrees inside another worktree.
 - Do not scatter alternate checkouts as sibling folders such as `LifeQuest-2` or `LifeQuest-test`.
 - Name worktree folders by role or feature focus so their purpose is obvious.
+
+## Run And Verify
+
+Codex should prefer repository-native commands that are already documented or already work in this project.
+
+Environment setup:
+
+- Create a venv when needed: `python -m venv .venv`
+- Install dev dependencies: `python -m pip install -e ".[dev]"`
+- Copy environment template on a fresh machine: `Copy-Item .env.example .env`
+
+Run the app locally:
+
+- API server: `python -m uvicorn app.main:app --reload`
+
+Primary verification commands:
+
+- Full test suite: `python -m pytest`
+- Targeted test file: `python -m pytest tests/test_learning_service.py`
+- Targeted test selection: `python -m pytest tests/test_subscription.py -k monthly`
+
+Important verification notes:
+
+- `pyproject.toml` currently defines pytest, but does not define a dedicated lint or typecheck command.
+- Do not claim lint or typecheck passed unless the repo gains an explicit command and you actually run it.
+- Prefer targeted tests for narrow changes and the full suite for cross-cutting changes when practical.
+- If a change affects the local UI, also name the relevant page or route for manual verification.
+
+Useful local routes:
+
+- `http://127.0.0.1:8000/docs`
+- `http://127.0.0.1:8000/`
+- `http://127.0.0.1:8000/dashboard`
+- `http://127.0.0.1:8000/life-admin/subscriptions`
+- `http://127.0.0.1:8000/japanese`
 
 ## File Ownership Guidance
 
@@ -136,6 +196,36 @@ Recommended startup sequence:
 4. Confirm that planned edits stay within the thread's ownership boundary.
 5. Only then begin implementation or review work.
 
+## Planning Expectations
+
+- For complex, ambiguous, or multi-step changes, plan first before editing.
+- A good task handoff or prompt should include: goal, context, constraints, and done-when conditions.
+- Keep one Codex thread focused on one coherent unit of work.
+- Use subagents mainly for bounded exploration, test analysis, log triage, or other read-heavy support tasks.
+- Avoid parallel write-heavy subagent work on overlapping files.
+
+## Done Means
+
+Before calling work complete, make sure all of the following are true unless the user explicitly waives them:
+
+- the change is scoped to the intended branch and worktree role
+- relevant tests were run, or the reason they were not run is clearly stated
+- any manual verification path is named for UI or integration-facing changes
+- no unrelated user changes were reverted
+- workflow or collaboration rule changes are reflected in `AGENTS.md`
+- review-oriented tasks follow the repository review guidance in `code_review.md`
+- finished work is committed on the current branch instead of being left only in the working tree
+
+## Commit And Push Expectations
+
+- If a coherent unit of work is finished, commit it before ending the task.
+- Do not treat "implemented but not committed yet" as done unless the user explicitly asks to stop before commit.
+- This expectation applies on every branch: `main`, `codex/integration`, feature branches, optimization branches, and any future working branch.
+- Prefer small, reviewable commits over large mixed commits.
+- If the user wants durable backup, handoff, PR preparation, or cross-machine continuity, also push the branch to the remote after committing.
+- If a branch already has a remote counterpart, do not assume leaving work only on the local branch is sufficient for handoff safety.
+- If you intentionally do not push, state that clearly in the final handoff.
+
 ## GitHub CLI Note
 
 This environment may inject broken proxy variables into the shell session.
@@ -152,6 +242,7 @@ $env:GIT_HTTPS_PROXY=$null
 ## Long-Running Context
 
 - Keep durable repository rules here instead of re-explaining them in each thread.
+- Keep review-specific guidance in `code_review.md` and reference it during reviews.
 - If a workflow becomes repetitive, promote it into a repo skill or documented checklist.
 - Use subagents mainly for read-heavy tasks such as exploration, triage, review, or test analysis.
 - Be cautious with parallel write-heavy tasks because they increase merge and coordination risk.
