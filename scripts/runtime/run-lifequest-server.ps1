@@ -18,4 +18,6 @@ $logDir = Split-Path -Parent $LogPath
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 Set-Location -LiteralPath $RepoRoot
 
+$ErrorActionPreference = "Continue"
 & $PythonPath -m uvicorn app.main:app --host $BindHost --port $Port *>> $LogPath
+exit $LASTEXITCODE
