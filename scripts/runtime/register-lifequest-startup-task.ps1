@@ -22,7 +22,7 @@ $ErrorActionPreference = "Continue"
 $exitCode = $LASTEXITCODE
 $ErrorActionPreference = "Stop"
 if ($exitCode -ne 0) {
-    throw "Failed to register startup task: $TaskName"
+    throw "Failed to register startup task: $TaskName. If Windows reports access denied, run this script from a normal elevated PowerShell session or create the task manually in Task Scheduler."
 }
 
 Write-Host "Registered startup task: $TaskName"

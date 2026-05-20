@@ -53,6 +53,13 @@ Register a user-level Windows Task Scheduler task:
 ```
 
 The task name is `LifeQuest Backend`. It runs when you log in and starts the backend in the background.
+If Windows reports `Access is denied`, run the same command from an elevated PowerShell session or create the task manually in Task Scheduler:
+
+```text
+Program: powershell.exe
+Arguments: -NoProfile -ExecutionPolicy Bypass -File "F:\Documents\projects\LifeQuest\scripts\runtime\start-lifequest.ps1"
+Trigger: At log on
+```
 
 Remove the startup task:
 
