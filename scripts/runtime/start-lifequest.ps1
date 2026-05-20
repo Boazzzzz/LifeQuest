@@ -25,11 +25,28 @@ function Get-LifeQuestListeners {
     param([int]$PortNumber)
 
     try {
-        return @(Get-NetTCPConnection -LocalPort $PortNumber -State Listen -ErrorAction Stop)
+        $connections = @(Get-NetTCPConnection -LocalPort $PortNumber -State Listen -ErrorAction Stop)
+        if ($connections.Count -gt 0) {
+            return $connections
+        }
     }
     catch {
-        return @()
     }
+
+    $listeners = @()
+    $lines = @(netstat -ano -p tcp | Select-String "LISTENING")
+    foreach ($line in $lines) {
+        $parts = @($line.Line -split "\s+" | Where-Object { $_ })
+        if ($parts.Count -ge 5 -and $parts[1] -match ":$PortNumber$") {
+            $listeners += [pscustomobject]@{
+                LocalAddress = $parts[1]
+                LocalPort = $PortNumber
+                OwningProcess = [int]$parts[4]
+            }
+        }
+    }
+
+    return $listeners
 }
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)

@@ -28,7 +28,19 @@ function Get-ListenerProcesses {
         $connections = @(Get-NetTCPConnection -LocalPort $PortNumber -State Listen -ErrorAction Stop)
     }
     catch {
-        return @()
+        $connections = @()
+    }
+
+    if ($connections.Count -eq 0) {
+        $lines = @(netstat -ano -p tcp | Select-String "LISTENING")
+        foreach ($line in $lines) {
+            $parts = @($line.Line -split "\s+" | Where-Object { $_ })
+            if ($parts.Count -ge 5 -and $parts[1] -match ":$PortNumber$") {
+                $connections += [pscustomobject]@{
+                    OwningProcess = [int]$parts[4]
+                }
+            }
+        }
     }
 
     $processIds = @($connections | Select-Object -ExpandProperty OwningProcess -Unique)

@@ -11,10 +11,34 @@ function Get-ListenerProcessIds {
         $connections = @(Get-NetTCPConnection -LocalPort $PortNumber -State Listen -ErrorAction Stop)
     }
     catch {
-        return @()
+        $connections = @()
+    }
+
+    if ($connections.Count -eq 0) {
+        $lines = @(netstat -ano -p tcp | Select-String "LISTENING")
+        foreach ($line in $lines) {
+            $parts = @($line.Line -split "\s+" | Where-Object { $_ })
+            if ($parts.Count -ge 5 -and $parts[1] -match ":$PortNumber$") {
+                $connections += [pscustomobject]@{
+                    OwningProcess = [int]$parts[4]
+                }
+            }
+        }
     }
 
     return @($connections | Select-Object -ExpandProperty OwningProcess -Unique)
+}
+
+function Test-LifeQuestHealth {
+    param([int]$PortNumber)
+
+    try {
+        $response = Invoke-RestMethod -Uri ("http://127.0.0.1:{0}/health" -f $PortNumber) -TimeoutSec 2
+        return $response.status -eq "ok"
+    }
+    catch {
+        return $false
+    }
 }
 
 function Get-ProcessCommandLine {
@@ -36,9 +60,10 @@ if ($processIds.Count -eq 0) {
 }
 
 $stopped = 0
+$isLifeQuestHealthy = Test-LifeQuestHealth -PortNumber $Port
 foreach ($processId in $processIds) {
     $commandLine = Get-ProcessCommandLine -ProcessId $processId
-    if ($commandLine -match "uvicorn" -and $commandLine -match "app\.main:app") {
+    if ($isLifeQuestHealthy -or ($commandLine -match "uvicorn" -and $commandLine -match "app\.main:app")) {
         Stop-Process -Id $processId -ErrorAction Stop
         Write-Host "Stopped LifeQuest backend process PID $processId."
         $stopped += 1
