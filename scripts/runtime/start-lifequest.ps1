@@ -34,12 +34,17 @@ function Get-LifeQuestListeners {
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
+$runner = Join-Path $PSScriptRoot "run-lifequest-server.ps1"
 $logDir = Join-Path $repoRoot "data\logs"
 $logPath = Join-Path $logDir ("lifequest-server-{0}.log" -f (Get-Date -Format "yyyy-MM-dd"))
 $dashboardUrl = "http://{0}:{1}/dashboard" -f $BindHost, $Port
 
 if (-not (Test-Path -LiteralPath $python)) {
     Write-Error "Missing virtualenv Python at $python. Create the venv and install dependencies first: python -m venv .venv; python -m pip install -e `".[dev]`""
+}
+
+if (-not (Test-Path -LiteralPath $runner)) {
+    Write-Error "Missing runtime runner at $runner."
 }
 
 if (Test-LifeQuestHealth -HostName $BindHost -PortNumber $Port) {
@@ -54,15 +59,26 @@ if ($listeners.Count -gt 0) {
 
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
-$command = @"
-`$ErrorActionPreference = "Stop"
-Set-Location -LiteralPath "$repoRoot"
-& "$python" -m uvicorn app.main:app --host "$BindHost" --port $Port *>> "$logPath"
-"@
+$arguments = @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "`"$runner`"",
+    "-RepoRoot",
+    "`"$repoRoot`"",
+    "-PythonPath",
+    "`"$python`"",
+    "-BindHost",
+    $BindHost,
+    "-Port",
+    $Port.ToString(),
+    "-LogPath",
+    "`"$logPath`""
+)
 
-$encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
 $process = Start-Process -FilePath "powershell.exe" `
-    -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encodedCommand) `
+    -ArgumentList $arguments `
     -WorkingDirectory $repoRoot `
     -WindowStyle Hidden `
     -PassThru
