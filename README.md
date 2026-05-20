@@ -241,6 +241,25 @@ http://127.0.0.1:8000/japanese
 
 The app uses `data/lifequest.db` by default with `DATABASE_BACKEND=sqlite`. The database file is ignored by git. Each machine can have its own local SQLite file unless you intentionally sync or migrate it.
 
+## Daily Runtime
+
+For everyday use on Windows, LifeQuest can run as a lightweight local backend at `http://127.0.0.1:8000` without development reload mode.
+
+```powershell
+.\scripts\runtime\start-lifequest.ps1
+.\scripts\runtime\status-lifequest.ps1
+.\scripts\runtime\open-dashboard.ps1
+.\scripts\runtime\stop-lifequest.ps1
+```
+
+The startup task helper can register LifeQuest to start when you log in:
+
+```powershell
+.\scripts\runtime\register-lifequest-startup-task.ps1
+```
+
+See [docs/lifequest_runtime.md](docs/lifequest_runtime.md) for setup, logs, and Task Scheduler details.
+
 ## Database Backends
 
 LifeQuest defaults to SQLite for local use, but it can also run against MSSQL when you want to practice a work-style database setup.

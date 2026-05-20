@@ -128,6 +128,10 @@ Environment setup:
 Run the app locally:
 
 - API server: `python -m uvicorn app.main:app --reload`
+- Daily runtime backend: `.\scripts\runtime\start-lifequest.ps1`
+- Daily runtime status: `.\scripts\runtime\status-lifequest.ps1`
+- Daily runtime dashboard: `.\scripts\runtime\open-dashboard.ps1`
+- Daily runtime shutdown: `.\scripts\runtime\stop-lifequest.ps1`
 
 Primary verification commands:
 
@@ -137,6 +141,7 @@ Primary verification commands:
 
 Important verification notes:
 
+- Use `--reload` only while actively developing. Daily always-on runtime should use the runtime scripts, which run uvicorn without reload mode.
 - `pyproject.toml` currently defines pytest, but does not define a dedicated lint or typecheck command.
 - Do not claim lint or typecheck passed unless the repo gains an explicit command and you actually run it.
 - Prefer targeted tests for narrow changes and the full suite for cross-cutting changes when practical.
