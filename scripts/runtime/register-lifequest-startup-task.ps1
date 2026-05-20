@@ -16,27 +16,13 @@ if (-not (Test-Path -LiteralPath $startScript)) {
     Write-Error "Missing startup script at $startScript."
 }
 
-$action = New-ScheduledTaskAction `
-    -Execute "powershell.exe" `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$startScript`""
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-$currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-$principal = New-ScheduledTaskPrincipal `
-    -UserId $currentUser `
-    -LogonType Interactive `
-    -RunLevel Limited
-$settings = New-ScheduledTaskSettingsSet `
-    -MultipleInstances IgnoreNew `
-    -StartWhenAvailable `
-    -AllowStartIfOnBatteries `
-    -DontStopIfGoingOnBatteries
-
-Register-ScheduledTask `
-    -TaskName $TaskName `
-    -Action $action `
-    -Trigger $trigger `
-    -Principal $principal `
-    -Settings $settings `
-    -Force | Out-Null
+$taskCommand = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $startScript
+$ErrorActionPreference = "Continue"
+& schtasks.exe /Create /TN $TaskName /SC ONLOGON /TR $taskCommand /F /RL LIMITED | Out-Host
+$exitCode = $LASTEXITCODE
+$ErrorActionPreference = "Stop"
+if ($exitCode -ne 0) {
+    throw "Failed to register startup task: $TaskName"
+}
 
 Write-Host "Registered startup task: $TaskName"
