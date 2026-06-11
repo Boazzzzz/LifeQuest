@@ -20,6 +20,60 @@ const fallbackData = {
       { name: "office365", currency: "JPY", amount: 1499, next_charge_date: null },
     ],
   },
+  game: {
+    completed_count: 0,
+    skipped_count: 0,
+    total_count: 4,
+    earned_xp: 0,
+    available_xp: 75,
+    gentle_message: "先挑一個最小任務開始。LifeQuest 不扣分，只幫你把路標點亮。",
+    quests: [
+      {
+        key: "python-focus",
+        title: "鍛造 Python",
+        description: "完成至少 25 分鐘 Python 實作、腳本或自動化練習。",
+        xp: 30,
+        category: "learning",
+        completion_type: "learning_signal",
+        status: "pending",
+        progress_label: "Python 0/25 分鐘",
+        action_label: "等待學習訊號",
+      },
+      {
+        key: "japanese-review",
+        title: "日文巡禮",
+        description: "完成至少 15 分鐘日文學習，或讓 Anki 今天有複習紀錄。",
+        xp: 25,
+        category: "learning",
+        completion_type: "learning_signal",
+        status: "pending",
+        progress_label: "日文 0/15 分鐘，Anki 0 張",
+        action_label: "等待學習訊號",
+      },
+      {
+        key: "life-admin-check",
+        title: "整理背包",
+        description: "掃過生活管理訊號，例如訂閱、待確認支出或小型行政事項。",
+        xp: 10,
+        category: "life-admin",
+        completion_type: "manual",
+        status: "pending",
+        progress_label: "手動確認",
+        action_label: "可手動完成",
+      },
+      {
+        key: "daily-brief",
+        title: "讀取任務簡報",
+        description: "看過今天的 LifeQuest 儀表板，知道下一步要做什麼。",
+        xp: 10,
+        category: "review",
+        completion_type: "manual",
+        status: "pending",
+        progress_label: "手動確認",
+        action_label: "可手動完成",
+      },
+    ],
+  },
   warnings: [
     "這個首頁目前還是產品方向原型；有些卡片會先用備援資料，等每個後端模組穩定後再完全接上。",
   ],
@@ -29,11 +83,16 @@ document.addEventListener("DOMContentLoaded", () => {
   void loadDashboard();
 });
 
+root.addEventListener("click", (event) => {
+  void handleQuestAction(event);
+});
+
 async function loadDashboard() {
-  const [health, pulse, subscriptions] = await Promise.all([
+  const [health, pulse, subscriptions, game] = await Promise.all([
     safeFetchJson("/health"),
     safeFetchJson("/learning/pulse/today"),
     safeFetchJson("/subscriptions/overview/monthly?days_ahead=35"),
+    safeFetchJson("/game/daily-board"),
   ]);
 
   const data = {
@@ -41,6 +100,7 @@ async function loadDashboard() {
     status: health?.status === "ok" ? "live" : "prototype",
     pulse: mergePulse(pulse),
     subscriptions: mergeSubscriptions(subscriptions),
+    game: mergeGame(game),
   };
   render(data);
 }
@@ -62,6 +122,7 @@ function render(data) {
         <nav class="nav-pills">
           <a class="pill" href="#modules">模組</a>
           <a class="pill" href="#today">今天</a>
+          <a class="pill" href="#quests">任務</a>
           <a class="pill" href="#money">生活管理</a>
           <a class="pill" href="#vision">路線圖</a>
         </nav>
@@ -95,7 +156,7 @@ function render(data) {
             ${miniCard("今天", formatShortDate(data.date))}
             ${miniCard("專注", `${data.pulse.focus_score}`)}
             ${miniCard("訂閱", `${data.subscriptions.active_subscription_count}`)}
-            ${miniCard("模組", "5")}
+            ${miniCard("今日 XP", `${data.game.earned_xp}`)}
           </section>
         </aside>
       </section>
@@ -107,6 +168,23 @@ function render(data) {
           ${metricCard("日文", `${data.pulse.japanese_minutes} 分鐘`, "Anki、閱讀、聽力或其他日文練習。", "複習")}
           ${metricCard("生活管理", `${totals.length} 種幣別`, "把固定支出集中在同一個地方看。", "掌控")}
         </div>
+
+        <section class="panel quest-board" id="quests" data-reveal data-delay="2">
+          <div class="section-head">
+            <div>
+              <h2 class="section-title">今日任務板</h2>
+              <p class="section-subtitle">溫柔 RPG 模式：有任務、有 XP，但沒有扣分、斷連勝或失敗懲罰。</p>
+            </div>
+            <div class="quest-score">
+              <span>${escapeHtml(String(data.game.earned_xp))}</span>
+              <small>/ ${escapeHtml(String(data.game.available_xp))} XP</small>
+            </div>
+          </div>
+          <div class="quest-list">
+            ${data.game.quests.map((quest) => questCard(quest)).join("")}
+          </div>
+          <div class="quest-gentle-message">${escapeHtml(data.game.gentle_message)}</div>
+        </section>
 
         <section class="panel" id="modules" data-reveal data-delay="2">
           <div class="section-head">
@@ -242,6 +320,50 @@ function mergeSubscriptions(subscriptions) {
   };
 }
 
+function mergeGame(game) {
+  if (!game) {
+    return fallbackData.game;
+  }
+  return {
+    completed_count: game.completed_count ?? fallbackData.game.completed_count,
+    skipped_count: game.skipped_count ?? fallbackData.game.skipped_count,
+    total_count: game.total_count ?? fallbackData.game.total_count,
+    earned_xp: game.earned_xp ?? fallbackData.game.earned_xp,
+    available_xp: game.available_xp ?? fallbackData.game.available_xp,
+    gentle_message: game.gentle_message ?? fallbackData.game.gentle_message,
+    quests: Array.isArray(game.quests) ? game.quests : fallbackData.game.quests,
+  };
+}
+
+async function handleQuestAction(event) {
+  const button = event.target.closest("[data-quest-action]");
+  if (!button) {
+    return;
+  }
+  const questKey = button.dataset.questKey;
+  const action = button.dataset.questAction;
+  if (!questKey || !action) {
+    return;
+  }
+
+  button.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = "處理中";
+  try {
+    const response = await fetch(`/game/daily-board/${encodeURIComponent(questKey)}/${action}`, {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new Error(`Quest action failed: ${response.status}`);
+    }
+    await loadDashboard();
+  } catch (error) {
+    console.error(error);
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
+}
+
 function miniCard(label, value) {
   return `<div class="mini-card"><div class="mini-label">${escapeHtml(label)}</div><div class="mini-value">${escapeHtml(String(value))}</div></div>`;
 }
@@ -260,6 +382,72 @@ function checkItem(title, meta) {
 
 function feedItem(title, meta) {
   return `<article class="feed-item"><div class="item-title">${escapeHtml(title)}</div><div class="item-meta">${escapeHtml(meta)}</div></article>`;
+}
+
+function questCard(quest) {
+  return `
+    <article class="quest-card quest-card-${escapeHtml(quest.status)}">
+      <div class="quest-main">
+        <div class="quest-top">
+          <div>
+            <div class="quest-kicker">${escapeHtml(categoryLabel(quest.category))} · ${escapeHtml(String(quest.xp))} XP</div>
+            <h3 class="quest-title">${escapeHtml(quest.title)}</h3>
+          </div>
+          <span class="quest-status">${escapeHtml(statusLabel(quest.status))}</span>
+        </div>
+        <p class="quest-description">${escapeHtml(quest.description)}</p>
+        <div class="quest-progress">${escapeHtml(quest.progress_label)}</div>
+      </div>
+      <div class="quest-actions">
+        ${questActions(quest)}
+      </div>
+    </article>
+  `;
+}
+
+function questActions(quest) {
+  if (quest.status === "completed") {
+    return `<span class="quest-action-note">已拿到 XP</span>`;
+  }
+  if (quest.status === "skipped" && quest.completion_type !== "manual") {
+    return `<span class="quest-action-note">今天先休息</span>`;
+  }
+
+  const actions = [];
+  if (quest.completion_type === "manual") {
+    actions.push(
+      `<button class="quest-button" type="button" data-quest-action="complete" data-quest-key="${escapeHtml(quest.key)}">完成</button>`,
+    );
+  }
+  if (quest.status !== "skipped") {
+    actions.push(
+      `<button class="quest-button quest-button-secondary" type="button" data-quest-action="skip" data-quest-key="${escapeHtml(quest.key)}">今天先休息</button>`,
+    );
+  }
+  return actions.join("");
+}
+
+function statusLabel(status) {
+  if (status === "completed") {
+    return "完成";
+  }
+  if (status === "skipped") {
+    return "休息";
+  }
+  return "待辦";
+}
+
+function categoryLabel(category) {
+  if (category === "learning") {
+    return "學習";
+  }
+  if (category === "life-admin") {
+    return "生活";
+  }
+  if (category === "review") {
+    return "回顧";
+  }
+  return category;
 }
 
 function currencyRow(currency, total) {

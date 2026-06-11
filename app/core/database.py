@@ -165,6 +165,23 @@ ON subscriptions(active);
 
 CREATE INDEX IF NOT EXISTS idx_subscriptions_category
 ON subscriptions(category);
+
+CREATE TABLE IF NOT EXISTS game_quest_events (
+    id TEXT PRIMARY KEY,
+    quest_key TEXT NOT NULL,
+    event_date TEXT NOT NULL,
+    action TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'manual',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(quest_key, event_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_game_quest_events_date
+ON game_quest_events(event_date);
+
+CREATE INDEX IF NOT EXISTS idx_game_quest_events_key_date
+ON game_quest_events(quest_key, event_date);
 """
 
 
@@ -449,6 +466,41 @@ MSSQL_SCHEMA_STATEMENTS = [
     )
     BEGIN
         CREATE INDEX idx_subscriptions_category ON subscriptions(category)
+    END
+    """,
+    """
+    IF OBJECT_ID(N'game_quest_events', N'U') IS NULL
+    BEGIN
+        CREATE TABLE game_quest_events (
+            id NVARCHAR(64) NOT NULL PRIMARY KEY,
+            quest_key NVARCHAR(120) NOT NULL,
+            event_date NVARCHAR(32) NOT NULL,
+            action NVARCHAR(20) NOT NULL,
+            source NVARCHAR(50) NOT NULL CONSTRAINT df_game_quest_events_source DEFAULT N'manual',
+            created_at NVARCHAR(64) NOT NULL,
+            updated_at NVARCHAR(64) NOT NULL,
+            CONSTRAINT uq_game_quest_events_key_date UNIQUE (quest_key, event_date)
+        )
+    END
+    """,
+    """
+    IF NOT EXISTS (
+        SELECT 1 FROM sys.indexes
+        WHERE name = N'idx_game_quest_events_date'
+          AND object_id = OBJECT_ID(N'game_quest_events')
+    )
+    BEGIN
+        CREATE INDEX idx_game_quest_events_date ON game_quest_events(event_date)
+    END
+    """,
+    """
+    IF NOT EXISTS (
+        SELECT 1 FROM sys.indexes
+        WHERE name = N'idx_game_quest_events_key_date'
+          AND object_id = OBJECT_ID(N'game_quest_events')
+    )
+    BEGIN
+        CREATE INDEX idx_game_quest_events_key_date ON game_quest_events(quest_key, event_date)
     END
     """,
 ]
