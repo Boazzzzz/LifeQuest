@@ -4,6 +4,8 @@ from contextlib import contextmanager
 from typing import Any
 
 from app.core.config import settings
+from app.core.exceptions import ConfigurationError
+from app.core.migrations import run_sqlite_migrations
 
 try:
     import pyodbc
@@ -459,8 +461,7 @@ def initialize_database() -> None:
         settings.database_path.parent.mkdir(parents=True, exist_ok=True)
         with connect() as connection:
             connection.executescript(SQLITE_SCHEMA)
-            _ensure_sqlite_snapshot_columns(connection)
-            _ensure_sqlite_subscription_columns(connection)
+            run_sqlite_migrations(connection)
         return
 
     for statement in MSSQL_SCHEMA_STATEMENTS:
@@ -521,9 +522,9 @@ def _open_connection() -> Any:
 
     connection_string = settings.mssql_connection_string
     if not connection_string:
-        raise RuntimeError("MSSQL backend requires MSSQL_CONNECTION_STRING")
+        raise ConfigurationError("MSSQL backend requires MSSQL_CONNECTION_STRING")
     if pyodbc is None:
-        raise RuntimeError("MSSQL backend requires the optional 'pyodbc' dependency")
+        raise ConfigurationError("MSSQL backend requires the optional 'pyodbc' dependency")
     return pyodbc.connect(connection_string)
 
 
@@ -533,121 +534,3 @@ def _rows_from_cursor(cursor: Any) -> list[dict[str, Any]]:
     columns = [str(column[0]) for column in cursor.description]
     rows = cursor.fetchall()
     return [dict(zip(columns, row, strict=False)) for row in rows]
-
-
-def _ensure_sqlite_snapshot_columns(connection: sqlite3.Connection) -> None:
-    rows = connection.execute("PRAGMA table_info(anki_daily_snapshots)").fetchall()
-    existing_columns = {str(row[1]) for row in rows}
-    if "scope" not in existing_columns:
-        connection.execute(
-            "ALTER TABLE anki_daily_snapshots ADD COLUMN scope TEXT NOT NULL DEFAULT 'all_decks'"
-        )
-    if "again_count" not in existing_columns:
-        connection.execute(
-            "ALTER TABLE anki_daily_snapshots ADD COLUMN again_count INTEGER NOT NULL DEFAULT 0"
-        )
-    if "hard_count" not in existing_columns:
-        connection.execute(
-            "ALTER TABLE anki_daily_snapshots ADD COLUMN hard_count INTEGER NOT NULL DEFAULT 0"
-        )
-    if "good_count" not in existing_columns:
-        connection.execute(
-            "ALTER TABLE anki_daily_snapshots ADD COLUMN good_count INTEGER NOT NULL DEFAULT 0"
-        )
-    if "easy_count" not in existing_columns:
-        connection.execute(
-            "ALTER TABLE anki_daily_snapshots ADD COLUMN easy_count INTEGER NOT NULL DEFAULT 0"
-        )
-    if "non_again_rate" not in existing_columns:
-        connection.execute(
-            "ALTER TABLE anki_daily_snapshots ADD COLUMN non_again_rate REAL"
-        )
-    if "due_count" not in existing_columns:
-        connection.execute(
-            "ALTER TABLE anki_daily_snapshots ADD COLUMN due_count INTEGER NOT NULL DEFAULT 0"
-        )
-    if "new_due_count" not in existing_columns:
-        connection.execute(
-            "ALTER TABLE anki_daily_snapshots ADD COLUMN new_due_count INTEGER NOT NULL DEFAULT 0"
-        )
-    if "learn_due_count" not in existing_columns:
-        connection.execute(
-            "ALTER TABLE anki_daily_snapshots ADD COLUMN learn_due_count INTEGER NOT NULL DEFAULT 0"
-        )
-    if "review_due_count" not in existing_columns:
-        connection.execute(
-            "ALTER TABLE anki_daily_snapshots ADD COLUMN review_due_count INTEGER NOT NULL DEFAULT 0"
-        )
-
-
-def _ensure_sqlite_subscription_columns(connection: sqlite3.Connection) -> None:
-    connection.execute("DROP TABLE IF EXISTS subscriptions_new")
-    rows = connection.execute("PRAGMA table_info(subscriptions)").fetchall()
-    if not rows:
-        return
-
-    existing_columns = {str(row[1]): row for row in rows}
-    billing_day_is_required = bool(existing_columns.get("billing_day", [None, None, None, 0])[3])
-    required_columns = {"recurrence_kind", "anchor_charge_date", "interval_days", "status"}
-    if not billing_day_is_required and required_columns.issubset(existing_columns):
-        return
-
-    recurrence_kind_select = "recurrence_kind" if "recurrence_kind" in existing_columns else "'monthly'"
-    billing_day_select = "billing_day" if "billing_day" in existing_columns else "NULL"
-    anchor_charge_date_select = "anchor_charge_date" if "anchor_charge_date" in existing_columns else "NULL"
-    interval_days_select = "interval_days" if "interval_days" in existing_columns else "NULL"
-    status_select = "status" if "status" in existing_columns else "CASE WHEN active = 1 THEN 'active' ELSE 'paused' END"
-
-    connection.executescript(
-        f"""
-        CREATE TABLE subscriptions_new (
-            id TEXT PRIMARY KEY,
-            key TEXT NOT NULL UNIQUE,
-            name TEXT NOT NULL UNIQUE,
-            amount REAL NOT NULL,
-            currency TEXT NOT NULL,
-            recurrence_kind TEXT NOT NULL DEFAULT 'monthly',
-            billing_day INTEGER,
-            anchor_charge_date TEXT,
-            interval_days INTEGER,
-            category TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'active',
-            active INTEGER NOT NULL DEFAULT 1,
-            notes TEXT,
-            tags TEXT NOT NULL DEFAULT '[]',
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-
-        INSERT INTO subscriptions_new (
-            id, key, name, amount, currency, recurrence_kind, billing_day,
-            anchor_charge_date, interval_days, category, status, active, notes, tags,
-            created_at, updated_at
-        )
-        SELECT
-            id,
-            key,
-            name,
-            amount,
-            currency,
-            COALESCE({recurrence_kind_select}, 'monthly'),
-            {billing_day_select},
-            {anchor_charge_date_select},
-            {interval_days_select},
-            category,
-            COALESCE({status_select}, CASE WHEN active = 1 THEN 'active' ELSE 'paused' END),
-            active,
-            notes,
-            tags,
-            created_at,
-            updated_at
-        FROM subscriptions;
-
-        DROP TABLE subscriptions;
-        ALTER TABLE subscriptions_new RENAME TO subscriptions;
-
-        CREATE INDEX IF NOT EXISTS idx_subscriptions_key ON subscriptions(key);
-        CREATE INDEX IF NOT EXISTS idx_subscriptions_active ON subscriptions(active);
-        CREATE INDEX IF NOT EXISTS idx_subscriptions_category ON subscriptions(category);
-        """
-    )

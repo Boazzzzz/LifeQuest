@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
 
+from app.core.exceptions import NotFoundError
 from app.models.activity import ActivityEvent, ActivityEventType
 from app.models.work_knowledge import WorkKnowledgeNote, WorkKnowledgeNoteCreate
 from app.repositories.activity import ActivityRepository
 from app.repositories.work_knowledge import WorkKnowledgeRepository
 
 
-class WorkKnowledgeNotFoundError(ValueError):
+class WorkKnowledgeNotFoundError(NotFoundError):
     pass
 
 
