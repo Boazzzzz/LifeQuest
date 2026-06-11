@@ -1,12 +1,12 @@
 # LifeQuest
 
-LifeQuest is a personal life operating system backend with a growing frontend. It is designed to connect learning, life admin, knowledge capture, existing automations, and future dashboards through one coherent local platform.
+LifeQuest is a personal life operating system backend with a growing frontend. It is designed to connect learning, life admin, knowledge capture, and daily review through one coherent local platform.
 
 The first working slice was **Learning Core** for Python and Japanese, because those were the highest-priority life goals at the start. The more durable direction is broader: LifeQuest should become a daily control center for both learning and life management.
 
 ## Product Goal
 
-LifeQuest should reduce administrative overhead and protect focus time. It should become the backend for daily learning, personal automation, future dashboards, and possible game-like frontend experiences.
+LifeQuest should reduce administrative overhead and protect focus time. It should become the backend for daily learning, life management, and practical review dashboards.
 
 Core principles:
 
@@ -14,8 +14,7 @@ Core principles:
 - A local relational database is the source of truth for LifeQuest-owned metadata and learning history.
 - Notion is the workspace for human-maintained content and the dashboard for generated summaries, not the canonical database.
 - External integrations must be optional and mock-friendly.
-- Existing automation projects should be integrated through adapters before being rewritten.
-- Risky automations, especially file moves and media cleanup, should start in dry-run mode.
+- External projects should stay outside LifeQuest unless they directly support learning, life admin, or review workflows.
 
 ## Product Shape
 
@@ -30,7 +29,7 @@ The core product should stay centered on five areas:
 - `Learning`: sessions, Anki, GitHub activity, progress summaries, and review loops.
 - `Life Admin`: subscriptions, recurring costs, small personal admin signals, and later reminders.
 - `Knowledge`: work notes, personal references, and a future inbox/review flow.
-- `Automation`: existing scripts, run history, integrations, and operational visibility.
+- `Daily Routines`: LifeQuest-owned scheduled tasks such as Anki launch/import and future review reminders.
 - `Dashboard / Review`: a calm daily homepage plus a future weekly review surface.
 
 This boundary matters. LifeQuest should be your integration and decision layer, not a full replacement for every specialized tool you already use.
@@ -42,7 +41,7 @@ The frontend should eventually feel like a personal control center, not a generi
 It should prioritize:
 
 - A homepage that explains today in one screen.
-- Clear module entry points for learning, life admin, knowledge, and automation.
+- Clear module entry points for learning, life admin, knowledge, and daily routines.
 - A weekly review page that turns raw records into decisions.
 - Enough visual personality that opening it feels motivating, not bureaucratic.
 
@@ -55,17 +54,17 @@ Current UI status:
 
 ## Tool Responsibility Boundaries
 
-LifeQuest should not become a duplicate Notion, Anki, GitHub, Raindrop, or script runner. The project should only build custom functionality when existing tools do not already solve the problem well.
+LifeQuest should not become a duplicate Notion, Anki, GitHub, bookmark manager, or script runner. The project should only build custom functionality when existing tools do not already solve the problem well and the result helps day-to-day life management.
 
 Examples:
 
 - Daily life journaling belongs in Notion unless LifeQuest needs structured metadata for automation.
 - Spaced repetition belongs in Anki; LifeQuest should only read learning stats and summarize progress.
 - Code history belongs in GitHub; LifeQuest should only derive learning signals from commits.
-- Bookmark collection belongs in Raindrop; LifeQuest should only observe, classify, sync, or summarize where useful.
-- Existing automation scripts should remain external until there is a clear reason to wrap them with an adapter.
+- Bookmark collection belongs in a dedicated bookmark tool; LifeQuest should not manage it unless a future review workflow clearly needs a small read-only signal.
+- Existing automation scripts should remain external unless they directly affect learning, life admin, or daily review.
 
-Build inside LifeQuest only when the feature is orchestration, normalization, observability, cross-tool insight, or future game/frontend API support.
+Build inside LifeQuest only when the feature is orchestration, normalization, or cross-tool insight for learning, life admin, knowledge capture, or review.
 
 ## Current Status
 
@@ -77,7 +76,7 @@ Implemented:
 - Anki history, difficult-card trends, due workload, and new/learn/review split for configured deck scopes.
 - GitHub status, recent push activity import, and Python commit detection.
 - Notion Learning Pulse sync with upsert by date.
-- Automation registry and run ledger for existing external scripts/projects.
+- Scheduled task registry and run ledger for LifeQuest-owned routines such as Anki.
 - Work Knowledge manual capture and Notion sync for sanitized system-engineer notes.
 - Monthly subscription tracker with local API and CLI support.
 - Notion schema/bootstrap support for a Japanese verb formality/tense reference table.
@@ -87,9 +86,7 @@ Implemented:
 
 Not implemented yet:
 
-- Raindrop, Telegram queue, Stash, and mobile game script adapters.
 - Knowledge inbox.
-- ACG media library scanner.
 - Unified live frontend beyond the current homepage prototype, subscription page, and Japanese slice.
 
 ## Architecture
@@ -106,13 +103,13 @@ LifeQuest
     Database-backed persistence for learning sessions, activity events, and daily snapshots.
 
   Service Layer
-    Business workflows such as pulse generation, import jobs, Notion sync, and future automation ledgers.
+    Business workflows such as pulse generation, import jobs, Notion sync, and scheduled task ledgers.
 
   Integration Adapters
-    Thin wrappers around AnkiConnect, GitHub, Notion, Raindrop, Telegram, Stash, and existing scripts.
+    Thin wrappers around AnkiConnect, GitHub, and Notion.
 
   Future UI Layer
-    A custom frontend or game-like interface can call the FastAPI backend.
+    A custom frontend can call the FastAPI backend.
 ```
 
 ### Current Data Flow
@@ -177,20 +174,19 @@ Status: mostly implemented.
 - Notion Learning Pulse upsert.
 - CLI quick capture.
 
-### Phase 2: Automation Observability
+### Phase 2: Daily Routine Observability
 
 Status: MVP implemented.
 
-- `AutomationDefinition` registry.
-- `AutomationRun` ledger.
+- Scheduled task registry.
+- Run ledger for LifeQuest-owned routines.
 - API and CLI for manual registration and run logging.
 - Last-run status and summary on automation lists.
 
 Still pending:
 
-- Adapters for existing Raindrop classifier, Telegram downloader, Stash sync, and mobile game script projects.
-- Manual trigger endpoints for trusted scripts.
-- Log file readers and status importers.
+- Better labels and dashboard summaries for LifeQuest-owned scheduled tasks.
+- Optional future read-only health checks for external projects if they become relevant to daily review.
 
 ### Phase 3: Knowledge Inbox
 
@@ -199,24 +195,16 @@ Work Knowledge capture is implemented as the first work-related knowledge layer.
 Still pending:
 
 - Unified `InboxItem` model for URLs, notes, AI summaries, and reading items.
-- Raindrop import and dead-link checks.
 - Notion knowledge sync.
 - Tagging and review status.
 
-### Phase 4: ACG Media Library
-
-- Scan only whitelisted ACG folders, not the full 3.2 TB cloud drive.
-- Create dry-run duplicate and organization suggestions.
-- Track work-level metadata with `MediaWorkNode`.
-- Avoid automatic file moves until the suggestion system is trusted.
-
-### Phase 5: Frontend / Game Layer
+### Phase 4: Frontend / Review Layer
 
 - Use LifeQuest API as the backend.
 - Turn the homepage prototype into a fully live control center.
-- Add dedicated pages for Learning, Life Admin, Knowledge, and Automation.
-- Add a weekly review flow before any heavier game layer.
-- Add quests, streaks, focus score, experience, and playful loops only after the core product is already useful without them.
+- Add dedicated pages for Learning, Life Admin, Knowledge, and Daily Routines.
+- Add a weekly review flow.
+- Add streaks, focus score, or playful loops only after the core product is already useful without them.
 
 ## Setup On A New Machine
 
@@ -379,11 +367,11 @@ The module form also works:
 python3 -m app.cli log python 25 "Small automation practice"
 ```
 
-## Automation Registry + Run Ledger
+## Scheduled Task Registry + Run Ledger
 
-LifeQuest tracks existing external automation projects without rewriting them.
+LifeQuest tracks its own scheduled routines without trying to become a general script runner.
 
-Use `AutomationDefinition` for the registry:
+Use `AutomationDefinition` for LifeQuest-owned routine definitions:
 
 ```text
 key
@@ -417,19 +405,18 @@ log_excerpt
 Example CLI workflow:
 
 ```bash
-lifequest automation register raindrop-classifier "Raindrop Unsorted Classifier" \
-  --category knowledge \
-  --project-path "/path/to/raindrop-project" \
+lifequest automation register anki-daily "Anki Daily Import" \
+  --category learning \
   --schedule-hint "daily" \
-  --tag raindrop
+  --tag anki
 
-lifequest automation log-run raindrop-classifier \
+lifequest automation log-run anki-daily \
   --status success \
   --items-processed 42 \
-  --summary "Tagged unsorted bookmarks by source domain"
+  --summary "Imported daily Anki snapshot"
 
 lifequest automation list
-lifequest automation runs raindrop-classifier
+lifequest automation runs anki-daily
 lifequest automation recent
 lifequest automation scheduled-tasks
 lifequest automation run-scheduled anki-daily
@@ -438,9 +425,9 @@ lifequest automation sync-notion
 
 Current design boundary:
 
-- LifeQuest records and observes existing automations.
-- Existing scripts remain the source of their own behavior.
-- Direct trigger/control should be added through narrow adapters after each script is trusted.
+- LifeQuest records and observes routines that belong to LifeQuest.
+- External scripts remain the source of their own behavior and schedules.
+- External project observability is a future option, not a current product pillar.
 - Notion sync upserts by `Key` and writes registry fields plus latest run status.
 
 Built-in scheduled tasks:
@@ -692,7 +679,7 @@ Integration Warnings: text
 
 ## Development Handoff Notes
 
-- Before adding a feature, check whether Notion, Anki, GitHub, Raindrop, Stash, or an existing project already handles it well.
+- Before adding a feature, check whether Notion, Anki, GitHub, or an existing dedicated project already handles it well.
 - Prefer integration, adapter, sync, or summary layers over rebuilding another app inside LifeQuest.
 - Keep adapters thin. Business logic belongs in services, not integration clients.
 - Do not make external APIs required for local development.

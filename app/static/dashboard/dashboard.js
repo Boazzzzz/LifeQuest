@@ -56,7 +56,7 @@ function render(data) {
           <span class="brand-mark" aria-hidden="true"></span>
           <div>
             <div class="brand-name">LifeQuest</div>
-            <div class="brand-subtitle">學習、生活管理、知識與自動化的個人控制中心。</div>
+            <div class="brand-subtitle">學習、生活管理、知識與每日例行的個人控制中心。</div>
           </div>
         </div>
         <nav class="nav-pills">
@@ -103,7 +103,7 @@ function render(data) {
       <section class="content-grid">
         <div class="metrics-grid" data-reveal data-delay="1">
           ${metricCard("學習脈搏", `${data.pulse.total_minutes} 分鐘`, "今天記錄到的 Python 與日文學習時間。", "今天")}
-          ${metricCard("Python", `${data.pulse.python_minutes} 分鐘`, "實作、腳本與自動化練習時間。", "建造")}
+          ${metricCard("Python", `${data.pulse.python_minutes} 分鐘`, "實作、腳本與後端練習時間。", "建造")}
           ${metricCard("日文", `${data.pulse.japanese_minutes} 分鐘`, "Anki、閱讀、聽力或其他日文練習。", "複習")}
           ${metricCard("生活管理", `${totals.length} 種幣別`, "把固定支出集中在同一個地方看。", "掌控")}
         </div>
@@ -119,7 +119,7 @@ function render(data) {
             ${moduleCard("學習", "學習紀錄、Anki、GitHub 活動、進度摘要與回顧循環。", "讓動能看得見。", "tone-learning")}
             ${moduleCard("生活管理", "訂閱、固定支出，以及那些很小但不該忘記的生活訊號。", "減少腦內雜訊。", "tone-admin")}
             ${moduleCard("知識", "工作筆記、個人參考資料，以及未來的收件匣與回顧流程。", "讓學到的東西能重複使用。", "tone-knowledge")}
-            ${moduleCard("自動化", "既有腳本、執行歷史與操作可觀測性。", "先觀察，再重寫。", "tone-automation")}
+            ${moduleCard("每日例行", "Anki 同步、每日檢查與之後的回顧提醒。", "小而穩定。", "tone-automation")}
             ${moduleCard("週回顧", "把紀錄轉成選擇的人類友善摘要頁。", "把資料變成方向。", "tone-review")}
           </div>
         </section>
@@ -136,7 +136,7 @@ function render(data) {
               ${checkItem("保護學習區塊", `Python ${data.pulse.python_minutes} 分鐘、日文 ${data.pulse.japanese_minutes} 分鐘，打開就看得到。`)}
               ${checkItem("檢查明日優先事項", localizePriority(data.pulse.tomorrow_priority, data.pulse))}
               ${checkItem("掃過固定支出", upcomingCharges.length ? `接下來的檢視區間內有 ${upcomingCharges.length} 筆訂閱項目。` : "有些訂閱還缺扣款日期。") }
-              ${checkItem("完成閉環", "週回顧之後應該能把學習、生活管理、自動化與知識整理接在一起。")}
+              ${checkItem("完成閉環", "週回顧之後應該能把學習、生活管理、每日例行與知識整理接在一起。")}
             </div>
           </section>
 
@@ -149,7 +149,7 @@ function render(data) {
             </div>
             <div class="feed-list">
               ${feedItem("每日首頁", "一個畫面看學習脈搏、生活管理與操作訊號。")}
-              ${feedItem("模組頁", "為學習、生活管理、知識與自動化保留各自的專用視圖。")}
+              ${feedItem("模組頁", "為學習、生活管理、知識與每日例行保留各自的專用視圖。")}
               ${feedItem("回顧儀式", "未來加一個更安靜的週回顧頁，幫你決定保留、停止或改善什麼。")}
             </div>
           </section>
@@ -190,7 +190,7 @@ function render(data) {
           </div>
           <div class="story-grid">
             ${timelineCard("第 1 階段", "可靠的後端切片", "每個領域先把捕捉、儲存、列表與摘要 API 做穩。")}
-            ${timelineCard("第 2 階段", "值得打開的首頁", "首頁要用白話解釋今天的學習、金錢、知識與自動化狀態。")}
+            ${timelineCard("第 2 階段", "值得打開的首頁", "首頁要用白話解釋今天的學習、金錢、知識與每日例行狀態。")}
             ${timelineCard("第 3 階段", "週回顧", "加入更安靜的頁面，幫你決定這週要保留、停止或改善什麼。")}
             ${timelineCard("第 4 階段", "可選的遊戲層", "只有在產品本身已經有用之後，才加入任務或 XP。")}
           </div>
@@ -282,7 +282,7 @@ function localizePriority(priority, pulse) {
   if (!pulse.python_minutes && !pulse.japanese_minutes) {
     return "明天先排一段短學習區塊，把節奏接回來。";
   }
-  return "明天先保護一段 Python 自動化練習，再完成一輪日文 Anki。";
+  return "明天先保護一段 Python 練習，再完成一輪日文 Anki。";
 }
 
 function currentDateString() {

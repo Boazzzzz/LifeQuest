@@ -97,7 +97,7 @@ Implementation notes:
 
 Purpose:
 
-Central view of existing external automation projects and their latest run status. This is an observability layer, not a replacement script runner.
+Central view of LifeQuest-owned scheduled routines and their latest run status. External project observability can be added later as a read-only health signal if it becomes useful for daily review.
 
 Upsert key:
 
@@ -119,7 +119,7 @@ Recommended properties:
 | Category | select | LifeQuest | `category` | `knowledge`, `media`, `game`, `learning`, `system`, `workflow`, `other`. |
 | Enabled | checkbox | Shared | `enabled` | Notion edits can become future config changes. |
 | Tags | multi-select | Shared | `tags` | Useful for grouping dashboards. |
-| External Project Path | rich text | LifeQuest | `external_project_path` | Local path hint; avoid secrets. |
+| External Project Path | rich text | LifeQuest | `external_project_path` | Optional future path hint; avoid secrets. |
 | Command Hint | rich text | LifeQuest | `command_hint` | Human hint, not auto-executed command yet. |
 | Schedule Hint | rich text | LifeQuest | `schedule_hint` | Example: `daily`, `hourly`, `manual`. |
 | Log Path | rich text | LifeQuest | `log_path` | Path hint only. |
@@ -135,7 +135,7 @@ Future sync behavior:
 - Query by `Key`.
 - Update registry fields and latest-run fields.
 - Preserve Notion-only notes unless LifeQuest is explicitly asked to overwrite.
-- Do not trigger scripts from Notion until an adapter is written and trusted.
+- Do not trigger external scripts from Notion.
 
 ## 3. LifeQuest - Work Knowledge
 
@@ -243,7 +243,7 @@ Lifecycle:
 
 Purpose:
 
-Unified triage queue for URLs, AI summaries, manual notes, Telegram-submitted items, and Raindrop items.
+Unified triage queue for manual notes, URLs, AI summaries, and review items that should flow into learning or work-knowledge review.
 
 Initial LifeQuest model to add later:
 
@@ -267,12 +267,12 @@ Recommended properties:
 | Notion Property | Type | Source | LifeQuest Field | Notes |
 | --- | --- | --- | --- | --- |
 | Name | title | Shared | `title` | Item title. |
-| Source | select | LifeQuest | `source` | `telegram`, `raindrop`, `manual`, `ai`, `file_scan`. |
+| Source | select | LifeQuest | `source` | `manual`, `ai`, `reading`, `notion`. |
 | Payload Type | select | LifeQuest | `payload_type` | `url`, `note`, `file`, `task`, `summary`. |
 | URL | url | LifeQuest | `url` | Optional. |
 | Summary | rich text | Shared | `summary` | Short summary. |
 | Status | select | Shared | `status` | `queued`, `processing`, `done`, `failed`, `skipped`. |
-| Target | select | Shared | `target` | `notion`, `stash`, `folder`, `read_later`, `work_knowledge`, `learning`. |
+| Target | select | Shared | `target` | `notion`, `read_later`, `work_knowledge`, `learning`. |
 | Tags | multi-select | Shared | `tags` | Auto and manual tags. |
 | Created At | date | LifeQuest | `created_at` | Creation timestamp. |
 | Processed At | date | LifeQuest | `processed_at` | Completion timestamp. |
@@ -280,8 +280,7 @@ Recommended properties:
 Future sync behavior:
 
 - Start with manual capture.
-- Then add Raindrop and Telegram adapters.
-- Avoid duplicating Raindrop's full bookmark manager inside LifeQuest.
+- Keep external bookmark and message systems outside LifeQuest unless a narrow review workflow needs a read-only signal.
 - Notion should be the triage dashboard, not the canonical crawler.
 
 ## Implementation Plan
@@ -302,6 +301,7 @@ Future sync behavior:
 - Include latest run status from `AutomationDefinition`.
 - Use `NOTION_AUTOMATIONS_DATA_SOURCE_ID` or `NOTION_AUTOMATIONS_DATABASE_ID`.
 - Use `lifequest notion check automations` before syncing.
+- Treat external project observability as future optional scope, not a default integration target.
 
 ### Step 3: Work Knowledge Capture
 
@@ -322,7 +322,6 @@ Future sync behavior:
 
 - Add `InboxItem` model, table, repository, service, API, and CLI.
 - Start manual.
-- Add Raindrop and Telegram adapters later.
 - Use `lifequest notion check inbox` before syncing once Inbox is implemented.
 
 ## Schema Tooling
