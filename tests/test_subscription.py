@@ -126,7 +126,7 @@ def test_subscription_service_supports_fixed_day_cycle(tmp_path, monkeypatch):
         )
     )
 
-    item = service.get_subscription(subscription.key, reference_date=subscription.created_at.date())
+    item = service.get_subscription(subscription.key, reference_date=date.fromisoformat("2026-05-08"))
     future_item = service.get_subscription(subscription.key, reference_date=date.fromisoformat("2026-06-29"))
 
     assert item.next_charge_date == date.fromisoformat("2026-05-28")
