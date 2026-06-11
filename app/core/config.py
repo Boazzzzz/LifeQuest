@@ -19,13 +19,18 @@ class Settings(BaseSettings):
     anki_api_version: int = 6
     anki_timeout_seconds: float = 5.0
     anki_decks: str = ""
-    anki_desktop_path: str = r"C:\Users\boaz0\AppData\Local\Programs\Anki\anki.exe"
+    anki_desktop_path: Path | None = None
+    anki_close_after_daily_import: bool = True
 
     github_enabled: bool = False
     github_token: str | None = None
     github_username: str | None = None
     github_api_version: str = "2022-11-28"
     github_timeout_seconds: float = 10.0
+
+    openai_api_key: str | None = None
+    openai_checkin_model: str = "gpt-5.4-mini"
+    openai_timeout_seconds: float = 15.0
 
     notion_enabled: bool = False
     notion_token: str | None = None

@@ -9,6 +9,8 @@ router = APIRouter(tags=["ui"])
 _STATIC_ROOT = Path(__file__).resolve().parents[2] / "static"
 _HOME_INDEX = _STATIC_ROOT / "dashboard" / "index.html"
 _JAPANESE_INDEX = _STATIC_ROOT / "japanese" / "index.html"
+_NIGHTLY_INDEX = _STATIC_ROOT / "nightly" / "index.html"
+_WEEKLY_REVIEW_INDEX = _STATIC_ROOT / "weekly-review" / "index.html"
 _SUBSCRIPTIONS_INDEX = _STATIC_ROOT / "subscriptions" / "index.html"
 
 
@@ -30,3 +32,18 @@ def lifequest_subscriptions_page() -> FileResponse:
 @router.get("/japanese", include_in_schema=False)
 def japanese_dashboard_page() -> FileResponse:
     return FileResponse(_JAPANESE_INDEX)
+
+
+@router.get("/nightly", include_in_schema=False)
+def nightly_checkin_page() -> FileResponse:
+    return FileResponse(_NIGHTLY_INDEX)
+
+
+@router.get("/checkin", include_in_schema=False)
+def checkin_alias_page() -> FileResponse:
+    return FileResponse(_NIGHTLY_INDEX)
+
+
+@router.get("/review/weekly", include_in_schema=False)
+def weekly_review_page() -> FileResponse:
+    return FileResponse(_WEEKLY_REVIEW_INDEX)

@@ -1,8 +1,8 @@
 import json
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
-from app.core.database import execute, fetch_all, select_limit_clause
-from app.models.learning import LearningSession
+from app.core.database import execute, fetch_all, is_mssql_backend
+from app.models.learning import LEARNING_TIMEZONE, LearningSession, LearningSubject
 
 
 class LearningRepository:
@@ -31,30 +31,62 @@ class LearningRepository:
         )
         return session
 
-    def list_sessions(self, limit: int = 100) -> list[LearningSession]:
-        limit_clause = select_limit_clause(limit)
-        query = f"""
-            SELECT {limit_clause}* FROM learning_sessions
-            ORDER BY started_at DESC
-        """
-        if limit_clause:
-            rows = fetch_all(query)
+    def list_sessions(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        target_date: date | None = None,
+        subject: LearningSubject | None = None,
+    ) -> list[LearningSession]:
+        where_clauses = []
+        params = []
+        if target_date is not None:
+            start, end = self._local_date_bounds(target_date)
+            where_clauses.append("started_at >= ? AND started_at < ?")
+            params.extend([start.isoformat(), end.isoformat()])
+        if subject is not None:
+            where_clauses.append("subject = ?")
+            params.append(subject.value)
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+        if is_mssql_backend():
+            rows = fetch_all(
+                f"""
+                SELECT * FROM learning_sessions
+                {where_sql}
+                ORDER BY started_at DESC, id DESC
+                OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+                """,
+                (*params, offset, limit),
+            )
         else:
-            rows = fetch_all(f"{query}\nLIMIT ?", (limit,))
+            rows = fetch_all(
+                f"""
+                SELECT * FROM learning_sessions
+                {where_sql}
+                ORDER BY started_at DESC, id DESC
+                LIMIT ? OFFSET ?
+                """,
+                (*params, limit, offset),
+            )
         return [self._row_to_session(row) for row in rows]
 
     def list_sessions_for_date(self, target_date: date) -> list[LearningSession]:
-        start = datetime.combine(target_date, time.min, tzinfo=timezone.utc)
-        end = datetime.combine(target_date, time.max, tzinfo=timezone.utc)
+        start, end = self._local_date_bounds(target_date)
         rows = fetch_all(
             """
             SELECT * FROM learning_sessions
-            WHERE started_at >= ? AND started_at <= ?
+            WHERE started_at >= ? AND started_at < ?
             ORDER BY started_at ASC
             """,
             (start.isoformat(), end.isoformat()),
         )
         return [self._row_to_session(row) for row in rows]
+
+    def _local_date_bounds(self, target_date: date) -> tuple[datetime, datetime]:
+        start = datetime.combine(target_date, time.min, tzinfo=LEARNING_TIMEZONE).astimezone(timezone.utc)
+        end = start + timedelta(days=1)
+        return start, end
 
     def _row_to_session(self, row) -> LearningSession:
         return LearningSession(

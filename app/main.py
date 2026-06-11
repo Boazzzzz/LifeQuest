@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import automations, health, integrations, learning, notion, subscriptions, ui, work_knowledge
+from app.api.routes import activity, automations, dashboard, health, integrations, learning, notion, review, subscriptions, ui, work_knowledge
 from app.core.config import settings
 from app.core.database import initialize_database
 from app.core.logging import configure_logging
@@ -18,11 +18,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 
+app.include_router(activity.router)
 app.include_router(automations.router)
+app.include_router(dashboard.router)
 app.include_router(health.router)
 app.include_router(integrations.router)
 app.include_router(learning.router)
 app.include_router(notion.router)
+app.include_router(review.router)
 app.include_router(subscriptions.router)
 app.include_router(ui.router)
 app.include_router(work_knowledge.router)

@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import datetime, timezone
 
+from app.models.activity import ActivityEvent, ActivityEventType
 from app.models.automation import (
     AutomationDefinition,
     AutomationDefinitionCreate,
@@ -9,6 +10,7 @@ from app.models.automation import (
     AutomationRunCreate,
     AutomationRunStatus,
 )
+from app.repositories.activity import ActivityRepository
 from app.repositories.automation import AutomationRepository
 
 
@@ -21,8 +23,13 @@ class AutomationConflictError(ValueError):
 
 
 class AutomationService:
-    def __init__(self, repository: AutomationRepository | None = None) -> None:
+    def __init__(
+        self,
+        repository: AutomationRepository | None = None,
+        activity_repository: ActivityRepository | None = None,
+    ) -> None:
         self.repository = repository or AutomationRepository()
+        self.activity_repository = activity_repository or ActivityRepository()
 
     def create_definition(self, payload: AutomationDefinitionCreate) -> AutomationDefinition:
         now = datetime.now(timezone.utc)
@@ -90,7 +97,22 @@ class AutomationService:
             log_excerpt=payload.log_excerpt,
             created_at=now,
         )
-        return self.repository.create_run(run)
+        created = self.repository.create_run(run)
+        self.activity_repository.create_event(
+            ActivityEvent(
+                event_type=ActivityEventType.automation_run_recorded,
+                source="automation",
+                payload={
+                    "automation_id": definition.id,
+                    "automation_key": definition.key,
+                    "automation_name": definition.name,
+                    "status": created.status.value,
+                    "items_processed": created.items_processed,
+                    "summary": created.summary,
+                },
+            )
+        )
+        return created
 
     def list_runs(self, key_or_id: str, limit: int = 50) -> list[AutomationRun]:
         definition = self.get_definition(key_or_id)

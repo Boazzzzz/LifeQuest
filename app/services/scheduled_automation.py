@@ -91,9 +91,19 @@ class ScheduledAutomationService:
             return self._run_open_anki()
         if task_key == "anki-daily":
             return await self._run_anki_daily()
+        if task_key == "close-anki":
+            return await self._run_close_anki()
         raise ScheduledAutomationNotFoundError(f"Scheduled automation not found: {task_key}")
 
     def _run_open_anki(self) -> ScheduledAutomationOutcome:
+        if settings.anki_desktop_path is None:
+            return ScheduledAutomationOutcome(
+                status=AutomationRunStatus.failed,
+                items_processed=0,
+                summary="Failed to launch desktop Anki.",
+                error_message="ANKI_DESKTOP_PATH is not configured.",
+            )
+
         desktop_path = Path(settings.anki_desktop_path)
         if not desktop_path.exists():
             return ScheduledAutomationOutcome(
@@ -140,11 +150,54 @@ class ScheduledAutomationService:
                 summary="Anki daily import failed.",
                 error_message=stats.error,
             )
+        close_error = await self._close_anki_after_daily_import()
+        summary = f"Imported {stats.reviews} Anki reviews across {len(stats.decks)} deck(s)."
+        status = AutomationRunStatus.success
+        if close_error is None and settings.anki_close_after_daily_import:
+            summary = f"{summary} Closed desktop Anki."
+        elif close_error:
+            summary = f"{summary} Desktop Anki close failed."
+            status = AutomationRunStatus.partial
+        return ScheduledAutomationOutcome(
+            status=status,
+            items_processed=stats.reviews,
+            summary=summary,
+            error_message=close_error,
+        )
+
+    async def _run_close_anki(self) -> ScheduledAutomationOutcome:
+        close_error = await self._close_anki_desktop()
+        if close_error:
+            return ScheduledAutomationOutcome(
+                status=AutomationRunStatus.failed,
+                items_processed=0,
+                summary="Failed to close desktop Anki.",
+                error_message=close_error,
+            )
+
         return ScheduledAutomationOutcome(
             status=AutomationRunStatus.success,
-            items_processed=stats.reviews,
-            summary=f"Imported {stats.reviews} Anki reviews across {len(stats.decks)} deck(s).",
+            items_processed=1,
+            summary="Closed desktop Anki.",
         )
+
+    async def _close_anki_after_daily_import(self) -> str | None:
+        if not settings.anki_close_after_daily_import:
+            return None
+
+        return await self._close_anki_desktop()
+
+    async def _close_anki_desktop(self) -> str | None:
+        anki_adapter = getattr(self.learning_service, "anki_adapter", None)
+        close_desktop = getattr(anki_adapter, "close_desktop", None)
+        if close_desktop is None:
+            return "Learning service does not expose an Anki desktop close operation."
+
+        try:
+            await close_desktop()
+        except Exception as error:
+            return str(error)
+        return None
 
 
 _SCHEDULED_AUTOMATIONS: dict[str, ScheduledAutomationSpec] = {
@@ -157,13 +210,22 @@ _SCHEDULED_AUTOMATIONS: dict[str, ScheduledAutomationSpec] = {
         notes="Starts desktop Anki so its built-in sync and AnkiConnect can become available before later imports.",
         tags=("anki", "japanese", "scheduled"),
     ),
+    "close-anki": ScheduledAutomationSpec(
+        key="close-anki",
+        name="Close Desktop Anki",
+        category=AutomationCategory.learning,
+        command_hint=".venv\\Scripts\\python.exe -m app.cli automation run-scheduled close-anki",
+        schedule_hint="daily",
+        notes="Closes desktop Anki through AnkiConnect. Schedule it after anki-daily as a fallback.",
+        tags=("anki", "japanese", "scheduled"),
+    ),
     "anki-daily": ScheduledAutomationSpec(
         key="anki-daily",
         name="Anki Daily Import",
         category=AutomationCategory.learning,
         command_hint=".venv\\Scripts\\python.exe -m app.cli automation run-scheduled anki-daily",
         schedule_hint="daily",
-        notes="Runs the daily Anki import through LifeQuest so Windows Task Scheduler only needs one stable entrypoint.",
+        notes="Runs the daily Anki import through LifeQuest, then closes desktop Anki when ANKI_CLOSE_AFTER_DAILY_IMPORT=true.",
         tags=("anki", "japanese", "scheduled"),
     ),
 }
