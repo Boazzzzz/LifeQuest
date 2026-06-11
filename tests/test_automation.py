@@ -155,7 +155,17 @@ def test_automation_cli_registers_and_logs_run(tmp_path, monkeypatch, capsys):
 def test_scheduled_automation_service_runs_anki_daily_and_records_run(tmp_path, monkeypatch):
     use_temp_database(tmp_path, monkeypatch)
 
+    class FakeAnkiAdapter:
+        def __init__(self):
+            self.closed = False
+
+        async def close_desktop(self):
+            self.closed = True
+
     class FakeLearningService:
+        def __init__(self):
+            self.anki_adapter = FakeAnkiAdapter()
+
         async def import_anki_today(self):
             class Stats:
                 enabled = True
@@ -165,15 +175,93 @@ def test_scheduled_automation_service_runs_anki_daily_and_records_run(tmp_path, 
 
             return Stats()
 
-    service = ScheduledAutomationService(learning_service=FakeLearningService())
+    learning_service = FakeLearningService()
+    service = ScheduledAutomationService(learning_service=learning_service)
     run = service.run("anki-daily")
     definitions = AutomationService().list_definitions()
 
+    assert learning_service.anki_adapter.closed is True
     assert run.status == AutomationRunStatus.success
     assert run.items_processed == 46
     assert "Imported 46 Anki reviews" in (run.summary or "")
+    assert "Closed desktop Anki" in (run.summary or "")
     assert definitions[0].key == "anki-daily"
     assert definitions[0].last_run_status == AutomationRunStatus.success
+
+
+def test_scheduled_automation_service_marks_anki_daily_partial_when_close_fails(tmp_path, monkeypatch):
+    use_temp_database(tmp_path, monkeypatch)
+
+    class FakeAnkiAdapter:
+        async def close_desktop(self):
+            raise RuntimeError("Anki refused to close")
+
+    class FakeLearningService:
+        anki_adapter = FakeAnkiAdapter()
+
+        async def import_anki_today(self):
+            class Stats:
+                enabled = True
+                error = None
+                reviews = 12
+                decks = ["N3"]
+
+            return Stats()
+
+    service = ScheduledAutomationService(learning_service=FakeLearningService())
+    run = service.run("anki-daily")
+
+    assert run.status == AutomationRunStatus.partial
+    assert run.items_processed == 12
+    assert "Imported 12 Anki reviews" in (run.summary or "")
+    assert "Desktop Anki close failed" in (run.summary or "")
+    assert run.error_message == "Anki refused to close"
+
+
+def test_scheduled_automation_service_runs_close_anki_and_records_run(tmp_path, monkeypatch):
+    use_temp_database(tmp_path, monkeypatch)
+
+    class FakeAnkiAdapter:
+        def __init__(self):
+            self.closed = False
+
+        async def close_desktop(self):
+            self.closed = True
+
+    class FakeLearningService:
+        def __init__(self):
+            self.anki_adapter = FakeAnkiAdapter()
+
+    learning_service = FakeLearningService()
+    service = ScheduledAutomationService(learning_service=learning_service)
+    run = service.run("close-anki")
+    definitions = AutomationService().list_definitions()
+
+    assert learning_service.anki_adapter.closed is True
+    assert run.status == AutomationRunStatus.success
+    assert run.items_processed == 1
+    assert run.summary == "Closed desktop Anki."
+    assert definitions[0].key == "close-anki"
+    assert definitions[0].last_run_status == AutomationRunStatus.success
+
+
+def test_scheduled_automation_service_reports_close_anki_failure(tmp_path, monkeypatch):
+    use_temp_database(tmp_path, monkeypatch)
+
+    class FakeAnkiAdapter:
+        async def close_desktop(self):
+            raise RuntimeError("AnkiConnect unavailable")
+
+    class FakeLearningService:
+        anki_adapter = FakeAnkiAdapter()
+
+    service = ScheduledAutomationService(learning_service=FakeLearningService())
+    run = service.run("close-anki")
+
+    assert run.status == AutomationRunStatus.failed
+    assert run.items_processed == 0
+    assert run.summary == "Failed to close desktop Anki."
+    assert run.error_message == "AnkiConnect unavailable"
 
 
 def test_scheduled_automation_service_runs_open_anki_and_records_run(tmp_path, monkeypatch):
@@ -222,6 +310,7 @@ def test_scheduled_automation_cli_lists_and_runs_anki_daily(tmp_path, monkeypatc
     assert list_code == 0
     assert run_code == 0
     assert "anki-daily [learning] Anki Daily Import" in captured.out
+    assert "close-anki [learning] Close Desktop Anki" in captured.out
     assert "skipped" in captured.out.lower()
 
 

@@ -1,7 +1,9 @@
+import re
 from datetime import date, datetime, timedelta, timezone
 
 from app.integrations.anki import AnkiAdapter, AnkiDailyStats
 from app.integrations.github import GitHubAdapter, GitHubDailyPythonActivity
+from app.integrations.openai_checkin import OpenAICheckinDraftAdapter, OpenAICheckinDraftError
 from app.models.activity import ActivityEvent, ActivityEventType
 from app.models.anki import (
     AnkiDailySnapshot,
@@ -12,7 +14,14 @@ from app.models.anki import (
     AnkiTodayOverview,
 )
 from app.models.japanese import JapaneseDashboardOverview
-from app.models.learning import LearningPulse, LearningSession, LearningSessionCreate, LearningSubject
+from app.models.learning import (
+    LEARNING_TIMEZONE,
+    LearningCheckinDraft,
+    LearningPulse,
+    LearningSession,
+    LearningSessionCreate,
+    LearningSubject,
+)
 from app.repositories.activity import ActivityRepository
 from app.repositories.anki import AnkiSnapshotRepository
 from app.repositories.learning import LearningRepository
@@ -26,12 +35,14 @@ class LearningService:
         anki_snapshot_repository: AnkiSnapshotRepository | None = None,
         anki_adapter: AnkiAdapter | None = None,
         github_adapter: GitHubAdapter | None = None,
+        openai_checkin_adapter: OpenAICheckinDraftAdapter | None = None,
     ) -> None:
         self.learning_repository = learning_repository or LearningRepository()
         self.activity_repository = activity_repository or ActivityRepository()
         self.anki_snapshot_repository = anki_snapshot_repository or AnkiSnapshotRepository()
         self.anki_adapter = anki_adapter or AnkiAdapter()
         self.github_adapter = github_adapter or GitHubAdapter()
+        self.openai_checkin_adapter = openai_checkin_adapter or OpenAICheckinDraftAdapter()
 
     def create_session(self, payload: LearningSessionCreate) -> LearningSession:
         ended_at = payload.ended_at
@@ -72,11 +83,55 @@ class LearningService:
         )
         return session
 
-    def list_sessions(self, limit: int = 100, offset: int = 0) -> list[LearningSession]:
-        return self.learning_repository.list_sessions(limit=limit, offset=offset)
+    def list_sessions(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        target_date: date | None = None,
+        subject: LearningSubject | None = None,
+    ) -> list[LearningSession]:
+        return self.learning_repository.list_sessions(
+            limit=limit,
+            offset=offset,
+            target_date=target_date,
+            subject=subject,
+        )
+
+    def draft_checkin(self, text: str) -> LearningCheckinDraft:
+        cleaned_text = self._clean_checkin_text(text)
+        if self.openai_checkin_adapter.enabled:
+            try:
+                return self.openai_checkin_adapter.draft_checkin(cleaned_text)
+            except OpenAICheckinDraftError:
+                return self._draft_checkin_local(
+                    cleaned_text,
+                    warnings=["AI 暫時不可用，先用本地整理。"],
+                )
+
+        return self._draft_checkin_local(
+            cleaned_text,
+            warnings=["AI 未設定，先用本地整理。"],
+        )
+
+    def _draft_checkin_local(self, cleaned_text: str, warnings: list[str] | None = None) -> LearningCheckinDraft:
+        subject = self._infer_checkin_subject(cleaned_text)
+        duration_minutes = self._infer_checkin_minutes(cleaned_text)
+        tags = self._infer_checkin_tags(cleaned_text, subject)
+        summary = self._build_checkin_summary(cleaned_text, subject)
+        assistant_note = self._build_checkin_note(subject, duration_minutes, tags)
+        return LearningCheckinDraft(
+            subject=subject,
+            duration_minutes=duration_minutes,
+            summary=summary,
+            tags=tags,
+            original_text=cleaned_text,
+            assistant_note=assistant_note,
+            draft_source="local",
+            warnings=warnings or [],
+        )
 
     async def build_today_pulse(self) -> LearningPulse:
-        return await self.build_pulse(date.today())
+        return await self.build_pulse(self._today())
 
     def get_anki_snapshot(self, target_date: date) -> AnkiDailySnapshot | None:
         return self.anki_snapshot_repository.get_snapshot_for_date(target_date)
@@ -91,17 +146,17 @@ class LearningService:
         difficult_days: int = 14,
         difficult_limit: int = 10,
     ) -> JapaneseDashboardOverview:
-        target_date = target_date or date.today()
-        pulse = await self.build_pulse(target_date)
-        if target_date == date.today():
-            anki_today = await self.get_anki_today_overview()
-        else:
-            snapshot = self.anki_snapshot_repository.get_snapshot_for_date(target_date)
-            anki_today = self.build_anki_overview(
-                stats=await self._anki_stats_for_date(target_date),
-                source="snapshot" if snapshot is not None else "live",
-                imported_at=snapshot.imported_at if snapshot is not None else None,
-            )
+        target_date = target_date or self._today()
+        anki_stats = await self._anki_stats_for_date(target_date)
+        github_stats = await self.github_adapter.get_daily_python_activity(target_date)
+        pulse = await self.build_pulse(target_date, anki_stats=anki_stats, github_stats=github_stats)
+        snapshot = self.anki_snapshot_repository.get_snapshot_for_date(target_date)
+        anki_today = self.build_anki_overview(
+            stats=anki_stats,
+            source="snapshot" if snapshot is not None else "live",
+            imported_at=snapshot.imported_at if snapshot is not None else None,
+            target_date=target_date,
+        )
         reviewed_today = await self.get_anki_reviewed_today_overview(target_date=target_date)
         history = self.get_anki_history(days=max(1, history_days), end_date=target_date)
         difficult_cards = self.get_anki_difficult_card_history(
@@ -184,7 +239,8 @@ class LearningService:
         )[:limit]
 
     async def get_anki_today_overview(self) -> AnkiTodayOverview:
-        snapshot = self.anki_snapshot_repository.get_snapshot_for_date(date.today())
+        today = self._today()
+        snapshot = self.anki_snapshot_repository.get_snapshot_for_date(today)
         if snapshot is not None:
             return self.build_anki_overview(
                 stats=AnkiDailyStats(
@@ -207,17 +263,19 @@ class LearningService:
                 ),
                 source="snapshot",
                 imported_at=snapshot.imported_at,
+                target_date=today,
             )
 
-        stats = await self.anki_adapter.get_daily_stats(date.today())
-        return self.build_anki_overview(stats=stats, source="live", imported_at=None)
+        stats = await self.anki_adapter.get_daily_stats(today)
+        return self.build_anki_overview(stats=stats, source="live", imported_at=None, target_date=today)
 
     async def import_anki_today(self) -> AnkiDailyStats:
-        stats = await self.anki_adapter.get_daily_stats(date.today())
+        today = self._today()
+        stats = await self.anki_adapter.get_daily_stats(today)
         if stats.connected:
             snapshot = self.anki_snapshot_repository.upsert_daily_snapshot(
                 AnkiDailySnapshot(
-                    snapshot_date=date.today(),
+                    snapshot_date=today,
                     scope=stats.scope,
                     reviews=stats.reviews,
                     accuracy=stats.accuracy,
@@ -250,7 +308,7 @@ class LearningService:
         return stats
 
     async def import_github_today(self) -> GitHubDailyPythonActivity:
-        activity = await self.github_adapter.get_daily_python_activity(date.today())
+        activity = await self.github_adapter.get_daily_python_activity(self._today())
         if activity.connected:
             self.activity_repository.create_event(
                 ActivityEvent(
@@ -262,10 +320,15 @@ class LearningService:
             )
         return activity
 
-    async def build_pulse(self, target_date: date) -> LearningPulse:
+    async def build_pulse(
+        self,
+        target_date: date,
+        anki_stats: AnkiDailyStats | None = None,
+        github_stats: GitHubDailyPythonActivity | None = None,
+    ) -> LearningPulse:
         sessions = self.learning_repository.list_sessions_for_date(target_date)
-        anki_stats = await self._anki_stats_for_date(target_date)
-        github_stats = await self.github_adapter.get_daily_python_activity(target_date)
+        anki_stats = anki_stats or await self._anki_stats_for_date(target_date)
+        github_stats = github_stats or await self.github_adapter.get_daily_python_activity(target_date)
         integration_warnings = []
         if anki_stats.error:
             integration_warnings.append(f"Anki: {anki_stats.error}")
@@ -344,14 +407,16 @@ class LearningService:
         stats: AnkiDailyStats,
         source: str,
         imported_at: datetime | None,
+        target_date: date | None = None,
     ) -> AnkiTodayOverview:
+        target_date = target_date or self._today()
         recent_snapshots = self.anki_snapshot_repository.list_recent_snapshots(30)
         if source == "live" and stats.reviews > 0 and all(
-            snapshot.snapshot_date != date.today() for snapshot in recent_snapshots
+            snapshot.snapshot_date != target_date for snapshot in recent_snapshots
         ):
             recent_snapshots = [
                 AnkiDailySnapshot(
-                    snapshot_date=date.today(),
+                    snapshot_date=target_date,
                     scope=stats.scope,
                     reviews=stats.reviews,
                     accuracy=stats.accuracy,
@@ -434,6 +499,130 @@ class LearningService:
             "snapshot_fresh",
             "Snapshot looks fresh. After more mobile reviews later today, sync desktop Anki and rerun import-anki.",
         )
+
+    def _today(self) -> date:
+        return datetime.now(LEARNING_TIMEZONE).date()
+
+    def _clean_checkin_text(self, text: str) -> str:
+        return re.sub(r"\s+", " ", text).strip()
+
+    def _infer_checkin_subject(self, text: str) -> LearningSubject:
+        lowered = text.casefold()
+        subject_keywords = {
+            LearningSubject.japanese: [
+                "日文",
+                "日本語",
+                "japanese",
+                "anki",
+                "n3",
+                "n2",
+                "文法",
+                "單字",
+                "読解",
+                "閱讀",
+                "聽力",
+            ],
+            LearningSubject.python: [
+                "python",
+                "fastapi",
+                "pytest",
+                "api",
+                "script",
+                "automation",
+                "自動化",
+                "程式",
+                "coding",
+                "code",
+            ],
+            LearningSubject.sre: [
+                "sre",
+                "linux",
+                "kubernetes",
+                "k8s",
+                "docker",
+                "nginx",
+                "incident",
+                "系統",
+                "伺服器",
+                "網路",
+                "排障",
+            ],
+        }
+        scores = {
+            subject: sum(1 for keyword in keywords if keyword.casefold() in lowered)
+            for subject, keywords in subject_keywords.items()
+        }
+        best_subject = max(scores, key=scores.get)
+        return best_subject if scores[best_subject] > 0 else LearningSubject.japanese
+
+    def _infer_checkin_minutes(self, text: str) -> int:
+        patterns = [
+            r"(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|hr|h|小時)",
+            r"(\d+)\s*(?:minutes?|mins?|min|m|分鐘|分)",
+        ]
+        for index, pattern in enumerate(patterns):
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match is None:
+                continue
+            value = float(match.group(1))
+            minutes = int(round(value * 60)) if index == 0 else int(value)
+            return max(1, min(minutes, 1440))
+        return 25
+
+    def _infer_checkin_tags(self, text: str, subject: LearningSubject) -> list[str]:
+        lowered = text.casefold()
+        tags = ["nightly-checkin", subject.value]
+        keyword_tags = {
+            "anki": ["anki", "review"],
+            "文法": ["grammar"],
+            "grammar": ["grammar"],
+            "單字": ["vocab"],
+            "vocab": ["vocab"],
+            "閱讀": ["reading"],
+            "reading": ["reading"],
+            "fastapi": ["fastapi"],
+            "pytest": ["pytest"],
+            "automation": ["automation"],
+            "自動化": ["automation"],
+            "linux": ["linux"],
+            "kubernetes": ["kubernetes"],
+            "k8s": ["kubernetes"],
+            "docker": ["docker"],
+            "nginx": ["nginx"],
+        }
+        for keyword, inferred_tags in keyword_tags.items():
+            if keyword.casefold() in lowered:
+                tags.extend(inferred_tags)
+        return list(dict.fromkeys(tags))
+
+    def _build_checkin_summary(self, text: str, subject: LearningSubject) -> str:
+        summary = re.sub(
+            r"\b\d+(?:\.\d+)?\s*(?:hours?|hrs?|hr|h|minutes?|mins?|min|m)\b",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        summary = re.sub(r"\d+(?:\.\d+)?\s*(?:小時|分鐘|分)", "", summary)
+        summary = re.sub(r"\s+([，,。.!?？])", r"\1", summary)
+        summary = re.sub(r"([，,])\s*([，,。])", r"\2", summary)
+        summary = re.sub(r"\s+", " ", summary).strip(" ，,。.")
+        if not summary:
+            labels = {
+                LearningSubject.japanese: "日文複習",
+                LearningSubject.python: "Python 練習",
+                LearningSubject.sre: "SRE 學習",
+            }
+            return labels[subject]
+        return summary[:2000]
+
+    def _build_checkin_note(self, subject: LearningSubject, duration_minutes: int, tags: list[str]) -> str:
+        subject_labels = {
+            LearningSubject.japanese: "日文",
+            LearningSubject.python: "Python",
+            LearningSubject.sre: "SRE",
+        }
+        tag_text = ", ".join(tags)
+        return f"我先整理成 {subject_labels[subject]}、{duration_minutes} 分鐘。標籤先放 {tag_text}，你可以改完再儲存。"
 
     def _anki_streak_days(self, snapshots: list[AnkiDailySnapshot]) -> int:
         snapshot_dates = sorted(

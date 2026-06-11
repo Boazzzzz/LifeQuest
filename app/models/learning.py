@@ -1,8 +1,13 @@
 from datetime import date, datetime, timezone
 from enum import StrEnum
+from typing import Literal
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+LEARNING_TIMEZONE = ZoneInfo("Asia/Taipei")
 
 
 class LearningSubject(StrEnum):
@@ -37,8 +42,38 @@ class LearningSessionCreate(BaseModel):
         if value is None:
             return None
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value
+            value = value.replace(tzinfo=LEARNING_TIMEZONE)
+        return value.astimezone(timezone.utc)
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, value: list[str]) -> list[str]:
+        tags = []
+        seen = set()
+        for tag in value:
+            normalized = tag.strip()
+            if not normalized:
+                continue
+            key = normalized.casefold()
+            if key in seen:
+                continue
+            tags.append(normalized)
+            seen.add(key)
+        return tags
+
+    @model_validator(mode="after")
+    def validate_time_window(self) -> "LearningSessionCreate":
+        if self.started_at is None or self.ended_at is None:
+            return self
+
+        duration_seconds = (self.ended_at - self.started_at).total_seconds()
+        if duration_seconds <= 0:
+            raise ValueError("ended_at must be later than started_at")
+
+        expected_seconds = self.duration_minutes * 60
+        if abs(duration_seconds - expected_seconds) > 60:
+            raise ValueError("duration_minutes must match the started_at and ended_at window")
+        return self
 
 
 class LearningSession(BaseModel):
@@ -53,6 +88,23 @@ class LearningSession(BaseModel):
     energy_level: int | None = None
     tags: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class LearningCheckinDraftRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
+class LearningCheckinDraft(BaseModel):
+    subject: LearningSubject
+    duration_minutes: int = Field(gt=0, le=1440)
+    summary: str = Field(min_length=1, max_length=2000)
+    difficulty: int | None = Field(default=None, ge=1, le=5)
+    energy_level: int | None = Field(default=None, ge=1, le=5)
+    tags: list[str] = Field(default_factory=list)
+    original_text: str
+    assistant_note: str
+    draft_source: Literal["ai", "local"] = "local"
+    warnings: list[str] = Field(default_factory=list)
 
 
 class LearningPulse(BaseModel):

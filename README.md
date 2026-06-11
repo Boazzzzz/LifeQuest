@@ -462,6 +462,7 @@ Current design boundary:
 Built-in scheduled tasks:
 
 - `anki-daily` runs the daily Anki import through LifeQuest and records the result in the automation ledger.
+- `close-anki` closes desktop Anki through AnkiConnect and can be scheduled after `anki-daily` as a fallback.
 - More built-in scheduled tasks should be added one by one as stable entrypoints, instead of pointing Windows Task Scheduler at many unrelated raw commands.
 
 Recommended Windows Task Scheduler pattern:
@@ -488,6 +489,7 @@ Example task commands:
 ```powershell
 .venv\Scripts\python.exe -m app.cli automation run-scheduled open-anki
 .venv\Scripts\python.exe -m app.cli automation run-scheduled anki-daily
+.venv\Scripts\python.exe -m app.cli automation run-scheduled close-anki
 ```
 
 If you want to use `open-anki`, set `ANKI_DESKTOP_PATH` in `.env` to your local Anki executable path.

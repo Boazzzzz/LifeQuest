@@ -155,6 +155,12 @@ class AnkiAdapter:
                 error=str(error),
             )
 
+    async def close_desktop(self) -> None:
+        if not self.enabled:
+            return
+
+        await self._invoke("guiExitAnki")
+
     async def _invoke(self, action: str, params: dict[str, Any] | None = None) -> Any:
         payload: dict[str, Any] = {"action": action, "version": self.api_version}
         if params is not None:

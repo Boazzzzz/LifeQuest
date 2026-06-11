@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.cli import main as cli_main
 from app.core.database import connect
@@ -9,9 +10,10 @@ from app.core.database import initialize_database
 from app.integrations.anki import AnkiAdapter
 from app.integrations.anki import AnkiDailyStats
 from app.integrations.github import GitHubDailyPythonActivity
+from app.integrations.openai_checkin import OpenAICheckinDraftAdapter, OpenAICheckinDraftError
 from app.main import app
-from app.models.anki import AnkiDailySnapshot
-from app.models.learning import LearningSessionCreate, LearningSubject
+from app.models.anki import AnkiDailySnapshot, AnkiReviewedTodayOverview
+from app.models.learning import LearningCheckinDraft, LearningSessionCreate, LearningSubject
 from app.repositories.anki import AnkiSnapshotRepository
 from app.services.learning import LearningService
 from app.services.notion_sync import NotionSyncService
@@ -50,14 +52,254 @@ def test_learning_pulse_counts_sre_sessions(tmp_path, monkeypatch):
             subject=LearningSubject.sre,
             duration_minutes=30,
             summary="Practiced Linux incident triage.",
+            started_at=datetime(2026, 5, 20, 17, 0, tzinfo=timezone.utc),
         )
     )
 
-    pulse = __import__("asyncio").run(service.build_today_pulse())
+    pulse = __import__("asyncio").run(service.build_pulse(date(2026, 5, 21)))
 
     assert pulse.sre_minutes == 30
     assert pulse.total_minutes == 30
     assert "SRE 30 min" in pulse.summary
+
+
+def test_learning_pulse_uses_local_learning_day_boundaries(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.config.settings.anki_enabled", False)
+    monkeypatch.setattr("app.core.config.settings.github_enabled", False)
+    initialize_database()
+
+    service = LearningService()
+    service.create_session(
+        LearningSessionCreate(
+            subject=LearningSubject.japanese,
+            duration_minutes=25,
+            summary="Late night local review.",
+            started_at=datetime(2026, 5, 10, 16, 30, tzinfo=timezone.utc),
+        )
+    )
+
+    previous_day = __import__("asyncio").run(service.build_pulse(date(2026, 5, 10)))
+    local_day = __import__("asyncio").run(service.build_pulse(date(2026, 5, 11)))
+
+    assert previous_day.total_minutes == 0
+    assert local_day.japanese_minutes == 25
+    assert local_day.total_minutes == 25
+
+
+def test_learning_session_create_validates_time_window_and_normalizes_tags():
+    payload = LearningSessionCreate(
+        subject=LearningSubject.python,
+        duration_minutes=30,
+        summary="Practice.",
+        started_at=datetime(2026, 5, 11, 9, 0),
+        ended_at=datetime(2026, 5, 11, 9, 30),
+        tags=[" fastapi ", "FastAPI", "", "routing"],
+    )
+
+    assert payload.started_at == datetime(2026, 5, 11, 1, 0, tzinfo=timezone.utc)
+    assert payload.ended_at == datetime(2026, 5, 11, 1, 30, tzinfo=timezone.utc)
+    assert payload.tags == ["fastapi", "routing"]
+
+    with pytest.raises(ValidationError, match="ended_at must be later"):
+        LearningSessionCreate(
+            subject=LearningSubject.python,
+            duration_minutes=30,
+            summary="Broken.",
+            started_at=datetime(2026, 5, 11, 10, 0, tzinfo=timezone.utc),
+            ended_at=datetime(2026, 5, 11, 9, 30, tzinfo=timezone.utc),
+        )
+
+    with pytest.raises(ValidationError, match="duration_minutes must match"):
+        LearningSessionCreate(
+            subject=LearningSubject.python,
+            duration_minutes=30,
+            summary="Mismatch.",
+            started_at=datetime(2026, 5, 11, 9, 0, tzinfo=timezone.utc),
+            ended_at=datetime(2026, 5, 11, 10, 0, tzinfo=timezone.utc),
+        )
+
+
+def test_learning_service_drafts_checkin_from_free_text():
+    class DisabledOpenAIAdapter:
+        enabled = False
+
+        def draft_checkin(self, text: str) -> LearningCheckinDraft:
+            raise AssertionError("disabled adapter should not be called")
+
+    draft = LearningService(openai_checkin_adapter=DisabledOpenAIAdapter()).draft_checkin(
+        "今天 Anki 複習 18 分鐘，另外看了 N3 文法。ている 還有點卡。"
+    )
+
+    assert draft.subject == LearningSubject.japanese
+    assert draft.duration_minutes == 18
+    assert draft.draft_source == "local"
+    assert draft.warnings == ["AI 未設定，先用本地整理。"]
+    assert "Anki" in draft.summary
+    assert "複習，另外" in draft.summary
+    assert "nightly-checkin" in draft.tags
+    assert "japanese" in draft.tags
+    assert "anki" in draft.tags
+    assert "grammar" in draft.tags
+    assert "18 分鐘" in draft.assistant_note
+
+
+def test_learning_service_drafts_python_and_sre_checkins():
+    class DisabledOpenAIAdapter:
+        enabled = False
+
+        def draft_checkin(self, text: str) -> LearningCheckinDraft:
+            raise AssertionError("disabled adapter should not be called")
+
+    service = LearningService(openai_checkin_adapter=DisabledOpenAIAdapter())
+    python_draft = service.draft_checkin("Python FastAPI route 測了 1.5 hours，順便補 pytest。")
+    sre_draft = service.draft_checkin("Kubernetes nginx ingress 排障 45 min")
+
+    assert python_draft.subject == LearningSubject.python
+    assert python_draft.duration_minutes == 90
+    assert python_draft.tags == ["nightly-checkin", "python", "fastapi", "pytest"]
+
+    assert sre_draft.subject == LearningSubject.sre
+    assert sre_draft.duration_minutes == 45
+    assert "kubernetes" in sre_draft.tags
+    assert "nginx" in sre_draft.tags
+
+
+def test_openai_checkin_adapter_requests_structured_output_schema():
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "output_text": (
+                    '{"subject":"japanese","duration_minutes":18,"summary":"Anki 複習和 N3 文法",'
+                    '"difficulty":null,"energy_level":null,'
+                    '"tags":["nightly-checkin","japanese","anki","grammar"],'
+                    '"assistant_note":"我已整理成日文 18 分鐘。"}'
+                )
+            }
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return None
+
+        def post(self, url, headers, json):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeResponse()
+
+    adapter = OpenAICheckinDraftAdapter(
+        api_key="test-key",
+        model="gpt-5.4-mini",
+        timeout_seconds=3,
+        client_factory=FakeClient,
+    )
+    draft = adapter.draft_checkin("今天 Anki 複習 18 分鐘，另外看了 N3 文法。")
+
+    assert draft.draft_source == "ai"
+    assert draft.subject == LearningSubject.japanese
+    assert draft.duration_minutes == 18
+    assert captured["url"] == "https://api.openai.com/v1/responses"
+    assert captured["headers"]["Authorization"] == "Bearer test-key"
+    assert captured["json"]["model"] == "gpt-5.4-mini"
+    assert captured["json"]["text"]["format"]["type"] == "json_schema"
+    assert captured["json"]["text"]["format"]["strict"] is True
+    assert captured["json"]["text"]["format"]["schema"]["properties"]["subject"]["enum"] == [
+        "python",
+        "japanese",
+        "sre",
+    ]
+
+
+def test_openai_checkin_adapter_rejects_invalid_response_schema():
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"output_text": '{"subject":"music","duration_minutes":18}'}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return None
+
+        def post(self, url, headers, json):
+            return FakeResponse()
+
+    adapter = OpenAICheckinDraftAdapter(api_key="test-key", client_factory=FakeClient)
+
+    with pytest.raises(OpenAICheckinDraftError):
+        adapter.draft_checkin("整理這段")
+
+
+def test_learning_service_uses_ai_draft_when_available():
+    class FakeOpenAIAdapter:
+        enabled = True
+
+        def draft_checkin(self, text: str) -> LearningCheckinDraft:
+            return LearningCheckinDraft(
+                subject=LearningSubject.python,
+                duration_minutes=35,
+                summary="FastAPI route 測試",
+                difficulty=None,
+                energy_level=None,
+                tags=["nightly-checkin", "python", "fastapi"],
+                original_text=text,
+                assistant_note="AI 已整理成 Python 35 分鐘。",
+                draft_source="ai",
+            )
+
+    draft = LearningService(openai_checkin_adapter=FakeOpenAIAdapter()).draft_checkin("Python FastAPI route 測了 35 分鐘")
+
+    assert draft.draft_source == "ai"
+    assert draft.subject == LearningSubject.python
+    assert draft.warnings == []
+
+
+def test_learning_service_falls_back_when_ai_draft_fails():
+    class FailingOpenAIAdapter:
+        enabled = True
+
+        def draft_checkin(self, text: str) -> LearningCheckinDraft:
+            raise OpenAICheckinDraftError("boom")
+
+    draft = LearningService(openai_checkin_adapter=FailingOpenAIAdapter()).draft_checkin("Kubernetes nginx ingress 排障 45 min")
+
+    assert draft.draft_source == "local"
+    assert draft.subject == LearningSubject.sre
+    assert draft.duration_minutes == 45
+    assert draft.warnings == ["AI 暫時不可用，先用本地整理。"]
+
+
+def test_learning_service_skips_ai_when_api_key_is_missing():
+    class DisabledOpenAIAdapter:
+        enabled = False
+
+        def draft_checkin(self, text: str) -> LearningCheckinDraft:
+            raise AssertionError("disabled adapter should not be called")
+
+    draft = LearningService(openai_checkin_adapter=DisabledOpenAIAdapter()).draft_checkin("Python pytest 20 min")
+
+    assert draft.draft_source == "local"
+    assert draft.subject == LearningSubject.python
+    assert draft.warnings == ["AI 未設定，先用本地整理。"]
 
 
 def test_learning_service_lists_sessions_with_limit_and_offset(tmp_path, monkeypatch):
@@ -85,6 +327,31 @@ def test_learning_service_lists_sessions_with_limit_and_offset(tmp_path, monkeyp
 
     assert [session.summary for session in first_page] == ["Newest session", "Middle session"]
     assert [session.summary for session in second_page] == ["Oldest session"]
+
+
+def test_learning_service_lists_sessions_with_date_and_subject_filters(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
+    initialize_database()
+
+    service = LearningService()
+    for subject, started_at, summary in [
+        (LearningSubject.python, datetime(2026, 5, 10, 15, 0, tzinfo=timezone.utc), "Previous local day"),
+        (LearningSubject.python, datetime(2026, 5, 10, 16, 30, tzinfo=timezone.utc), "Python local day"),
+        (LearningSubject.japanese, datetime(2026, 5, 11, 1, 0, tzinfo=timezone.utc), "Japanese local day"),
+    ]:
+        service.create_session(
+            LearningSessionCreate(
+                subject=subject,
+                duration_minutes=20,
+                summary=summary,
+                started_at=started_at,
+            )
+        )
+
+    sessions = service.list_sessions(target_date=date(2026, 5, 11), subject=LearningSubject.python)
+
+    assert [session.summary for session in sessions] == ["Python local day"]
 
 
 def test_learning_pulse_includes_anki_stats(tmp_path, monkeypatch):
@@ -334,6 +601,22 @@ def test_anki_reviewed_today_groups_unique_cards():
     assert overview.cards[1].good_count == 1
 
 
+def test_anki_adapter_closes_desktop_with_ankiconnect_action():
+    actions = []
+
+    class FakeAnkiAdapter(AnkiAdapter):
+        def __init__(self) -> None:
+            super().__init__(enabled=True)
+
+        async def _invoke(self, action: str, params=None):
+            actions.append((action, params))
+            return None
+
+    __import__("asyncio").run(FakeAnkiAdapter().close_desktop())
+
+    assert actions == [("guiExitAnki", None)]
+
+
 def test_anki_today_overview_includes_insight_fields(tmp_path, monkeypatch):
     monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
     monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
@@ -549,7 +832,7 @@ def test_nightly_checkin_page_serves_html(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert alias_response.status_code == 200
-    assert "LifeQuest 睡前自學回顧" in response.text
+    assert "LifeQuest Nightly Check-in" in response.text
     assert 'id="root"' in response.text
 
 
@@ -596,6 +879,174 @@ def test_learning_sessions_api_supports_offset_pagination(tmp_path, monkeypatch)
 
     assert response.status_code == 200
     assert [session["summary"] for session in response.json()] == ["Middle session"]
+
+
+def test_learning_sessions_api_supports_date_and_subject_filters(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
+    initialize_database()
+
+    with TestClient(app) as client:
+        for subject, started_at, summary in [
+            ("python", "2026-05-10T15:00:00Z", "Previous local day"),
+            ("python", "2026-05-10T16:30:00Z", "Python local day"),
+            ("japanese", "2026-05-11T01:00:00Z", "Japanese local day"),
+        ]:
+            response = client.post(
+                "/learning/sessions",
+                json={
+                    "subject": subject,
+                    "duration_minutes": 20,
+                    "summary": summary,
+                    "started_at": started_at,
+                },
+            )
+            assert response.status_code == 200
+
+        response = client.get(
+            "/learning/sessions",
+            params={"date": "2026-05-11", "subject": "python"},
+        )
+
+    assert response.status_code == 200
+    assert [session["summary"] for session in response.json()] == ["Python local day"]
+
+
+def test_learning_checkin_draft_endpoint_structures_free_text(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
+    initialize_database()
+
+    class DisabledOpenAIAdapter:
+        enabled = False
+
+        def draft_checkin(self, text: str) -> LearningCheckinDraft:
+            raise AssertionError("disabled adapter should not be called")
+
+    monkeypatch.setattr("app.services.learning.OpenAICheckinDraftAdapter", DisabledOpenAIAdapter)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/learning/checkin/draft",
+            json={"text": "今天 Linux systemd journal 看了 30 分鐘，整理 nginx 502 排障。"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["subject"] == "sre"
+    assert payload["duration_minutes"] == 30
+    assert "nightly-checkin" in payload["tags"]
+    assert "linux" in payload["tags"]
+    assert "nginx" in payload["tags"]
+
+
+def test_learning_checkin_draft_endpoint_returns_ai_source_when_adapter_succeeds(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
+    initialize_database()
+
+    class FakeOpenAIAdapter:
+        enabled = True
+
+        def draft_checkin(self, text: str) -> LearningCheckinDraft:
+            return LearningCheckinDraft(
+                subject=LearningSubject.python,
+                duration_minutes=40,
+                summary="FastAPI 測試",
+                tags=["nightly-checkin", "python", "fastapi"],
+                original_text=text,
+                assistant_note="AI 已整理成 Python 40 分鐘。",
+                draft_source="ai",
+            )
+
+    monkeypatch.setattr("app.services.learning.OpenAICheckinDraftAdapter", FakeOpenAIAdapter)
+
+    with TestClient(app) as client:
+        response = client.post("/learning/checkin/draft", json={"text": "Python FastAPI 測了 40 分鐘"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["draft_source"] == "ai"
+    assert payload["subject"] == "python"
+    assert payload["warnings"] == []
+
+
+def test_learning_checkin_draft_endpoint_falls_back_when_adapter_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
+    initialize_database()
+
+    class FakeOpenAIAdapter:
+        enabled = True
+
+        def draft_checkin(self, text: str) -> LearningCheckinDraft:
+            raise OpenAICheckinDraftError("boom")
+
+    monkeypatch.setattr("app.services.learning.OpenAICheckinDraftAdapter", FakeOpenAIAdapter)
+
+    with TestClient(app) as client:
+        response = client.post("/learning/checkin/draft", json={"text": "Kubernetes nginx ingress 排障 45 min"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["draft_source"] == "local"
+    assert payload["subject"] == "sre"
+    assert payload["duration_minutes"] == 45
+    assert payload["warnings"] == ["AI 暫時不可用，先用本地整理。"]
+
+
+def test_japanese_dashboard_reuses_anki_and_github_stats_for_pulse(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.database_path", tmp_path / "lifequest.db")
+    monkeypatch.setattr("app.core.database.settings.database_path", tmp_path / "lifequest.db")
+    initialize_database()
+
+    class CountingAnkiAdapter:
+        def __init__(self) -> None:
+            self.daily_stats_calls = 0
+
+        async def get_daily_stats(self, target_date: date) -> AnkiDailyStats:
+            self.daily_stats_calls += 1
+            return AnkiDailyStats(
+                enabled=True,
+                connected=True,
+                reviews=12,
+                accuracy=90.0,
+                decks=["N3"],
+            )
+
+        async def get_reviewed_today_overview(self, target_date: date | None = None) -> AnkiReviewedTodayOverview:
+            return AnkiReviewedTodayOverview(
+                enabled=True,
+                connected=True,
+                target_date=target_date or date.today(),
+                total_reviews=12,
+                total_unique_cards=10,
+                decks=["N3"],
+            )
+
+    class CountingGitHubAdapter:
+        def __init__(self) -> None:
+            self.daily_activity_calls = 0
+
+        async def get_daily_python_activity(self, target_date: date) -> GitHubDailyPythonActivity:
+            self.daily_activity_calls += 1
+            return GitHubDailyPythonActivity(
+                enabled=True,
+                connected=True,
+                commits=1,
+                python_commits=1,
+            )
+
+    anki_adapter = CountingAnkiAdapter()
+    github_adapter = CountingGitHubAdapter()
+    service = LearningService(anki_adapter=anki_adapter, github_adapter=github_adapter)
+
+    dashboard = __import__("asyncio").run(service.get_japanese_dashboard(target_date=date(2026, 5, 11)))
+
+    assert dashboard.pulse.anki_reviews == 12
+    assert dashboard.anki_today.reviews == 12
+    assert anki_adapter.daily_stats_calls == 1
+    assert github_adapter.daily_activity_calls == 1
 
 
 def test_cli_anki_status_reports_disabled(tmp_path, monkeypatch, capsys):

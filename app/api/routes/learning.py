@@ -11,7 +11,14 @@ from app.models.anki import (
     AnkiTodayOverview,
 )
 from app.models.japanese import JapaneseDashboardOverview
-from app.models.learning import LearningPulse, LearningSession, LearningSessionCreate
+from app.models.learning import (
+    LearningCheckinDraft,
+    LearningCheckinDraftRequest,
+    LearningPulse,
+    LearningSession,
+    LearningSessionCreate,
+    LearningSubject,
+)
 from app.services.learning import LearningService
 from app.services.notion_sync import NotionSyncService
 
@@ -27,8 +34,20 @@ def create_learning_session(payload: LearningSessionCreate) -> LearningSession:
 def list_learning_sessions(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    target_date: date | None = Query(default=None, alias="date"),
+    subject: LearningSubject | None = Query(default=None),
 ) -> list[LearningSession]:
-    return LearningService().list_sessions(limit=limit, offset=offset)
+    return LearningService().list_sessions(
+        limit=limit,
+        offset=offset,
+        target_date=target_date,
+        subject=subject,
+    )
+
+
+@router.post("/checkin/draft", response_model=LearningCheckinDraft)
+def draft_learning_checkin(payload: LearningCheckinDraftRequest) -> LearningCheckinDraft:
+    return LearningService().draft_checkin(payload.text)
 
 
 @router.get("/pulse/today", response_model=LearningPulse)
