@@ -28,11 +28,11 @@ def test_automation_service_registers_definition_and_run(tmp_path, monkeypatch):
 
     definition = service.create_definition(
         AutomationDefinitionCreate(
-            key="raindrop-classifier",
-            name="Raindrop Unsorted Classifier",
-            category=AutomationCategory.knowledge,
+            key="weekly-review",
+            name="Weekly Review",
+            category=AutomationCategory.workflow,
             schedule_hint="daily",
-            tags=["raindrop"],
+            tags=["review"],
         )
     )
     run = service.create_run(
@@ -49,7 +49,7 @@ def test_automation_service_registers_definition_and_run(tmp_path, monkeypatch):
     runs = service.list_runs(definition.key)
 
     assert run.finished_at is not None
-    assert definitions[0].key == "raindrop-classifier"
+    assert definitions[0].key == "weekly-review"
     assert definitions[0].last_run_status == AutomationRunStatus.success
     assert definitions[0].last_run_summary == "Tagged unsorted bookmarks."
     assert runs[0].items_processed == 42
@@ -58,7 +58,7 @@ def test_automation_service_registers_definition_and_run(tmp_path, monkeypatch):
 def test_automation_service_rejects_duplicate_keys(tmp_path, monkeypatch):
     use_temp_database(tmp_path, monkeypatch)
     service = AutomationService()
-    payload = AutomationDefinitionCreate(key="telegram-queue", name="Telegram Queue")
+    payload = AutomationDefinitionCreate(key="weekly-review", name="Weekly Review")
 
     service.create_definition(payload)
 
@@ -73,14 +73,13 @@ def test_automation_api_registers_and_lists_runs(tmp_path, monkeypatch):
         create_response = client.post(
             "/automations",
             json={
-                "key": "stash-sync",
-                "name": "Stash Sync",
-                "category": "media",
-                "external_project_path": "/tmp/stash-sync",
+                "key": "anki-daily",
+                "name": "Anki Daily Import",
+                "category": "learning",
             },
         )
         run_response = client.post(
-            "/automations/stash-sync/runs",
+            "/automations/anki-daily/runs",
             json={
                 "status": "partial",
                 "trigger_source": "api",
@@ -88,7 +87,7 @@ def test_automation_api_registers_and_lists_runs(tmp_path, monkeypatch):
                 "summary": "Synced available queue items.",
             },
         )
-        list_response = client.get("/automations/stash-sync/runs")
+        list_response = client.get("/automations/anki-daily/runs")
 
     assert create_response.status_code == 201
     assert run_response.status_code == 201
@@ -115,12 +114,11 @@ def test_automation_cli_registers_and_logs_run(tmp_path, monkeypatch, capsys):
         [
             "automation",
             "register",
-            "mobile-game-scripts",
-            "Mobile",
-            "Game",
-            "Scripts",
+            "weekly-review",
+            "Weekly",
+            "Review",
             "--category",
-            "game",
+            "workflow",
             "--tag",
             "daily",
         ]
@@ -129,7 +127,7 @@ def test_automation_cli_registers_and_logs_run(tmp_path, monkeypatch, capsys):
         [
             "automation",
             "log-run",
-            "mobile-game-scripts",
+            "weekly-review",
             "--status",
             "success",
             "--items-processed",
@@ -147,8 +145,8 @@ def test_automation_cli_registers_and_logs_run(tmp_path, monkeypatch, capsys):
     assert register_code == 0
     assert log_code == 0
     assert list_code == 0
-    assert "Registered automation mobile-game-scripts" in captured.out
-    assert "mobile-game-scripts [game] Mobile Game Scripts" in captured.out
+    assert "Registered automation weekly-review" in captured.out
+    assert "weekly-review [workflow] Weekly Review" in captured.out
     assert "last: success" in captured.out
 
 

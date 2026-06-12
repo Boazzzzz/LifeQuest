@@ -59,19 +59,19 @@ def test_learning_pulse_notion_properties_match_schema():
 
 def test_automation_notion_properties_match_schema():
     automation = AutomationDefinition(
-        key="raindrop-classifier",
-        name="Raindrop Unsorted Classifier",
-        category=AutomationCategory.knowledge,
-        external_project_path="/projects/raindrop",
-        command_hint="python classify.py",
+        key="anki-daily",
+        name="Anki Daily Import",
+        category=AutomationCategory.learning,
+        external_project_path=None,
+        command_hint=".venv\\Scripts\\python.exe -m app.cli automation run-scheduled anki-daily",
         schedule_hint="daily",
-        log_path="/logs/raindrop.log",
+        log_path=None,
         owner="David",
         enabled=True,
-        notes="Existing external project.",
-        tags=["raindrop", "bookmarks"],
+        notes="LifeQuest-owned scheduled routine.",
+        tags=["anki", "learning"],
         last_run_status=AutomationRunStatus.success,
-        last_run_summary="Tagged 42 bookmarks.",
+        last_run_summary="Imported 42 Anki reviews.",
     )
 
     properties = NotionSyncService()._build_automation_properties(automation)
@@ -93,8 +93,8 @@ def test_automation_notion_properties_match_schema():
         "Last Run Summary",
         "Updated At",
     }
-    assert properties["Key"] == {"rich_text": [{"text": {"content": "raindrop-classifier"}}]}
-    assert properties["Category"] == {"select": {"name": "knowledge"}}
+    assert properties["Key"] == {"rich_text": [{"text": {"content": "anki-daily"}}]}
+    assert properties["Category"] == {"select": {"name": "learning"}}
     assert properties["Enabled"] == {"checkbox": True}
     assert properties["Last Run Status"] == {"select": {"name": "success"}}
 

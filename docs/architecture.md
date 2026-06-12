@@ -2,14 +2,14 @@
 
 ## Product Direction
 
-LifeQuest is the central backend for personal automation. It should integrate existing automations instead of immediately rewriting them.
+LifeQuest is the central backend for personal learning, life admin, knowledge capture, and review. It should integrate only the external tools that directly support those goals.
 
 Primary purpose:
 
 - Protect focus for Python and Japanese learning.
 - Reduce administrative overhead.
-- Turn scattered automation outputs into observable events.
-- Keep future frontend and game-like interfaces possible.
+- Turn learning and life-admin signals into useful review surfaces.
+- Keep future frontend interfaces possible without expanding into a general script runner.
 
 ## System Layers
 
@@ -29,11 +29,9 @@ Initial learning models:
 
 Future general models:
 
-- `UniversalNode`
 - `InboxItem`
 - `AutomationDefinition`
 - `AutomationRun`
-- `MediaWorkNode`
 
 ### 3. Repository Layer
 
@@ -45,8 +43,7 @@ Business workflows:
 
 - learning pulse generation
 - Notion sync
-- automation run ledger
-- asset/media indexing
+- scheduled task run ledger
 - insight generation
 
 ### 5. Integration Adapters
@@ -56,10 +53,6 @@ Thin wrappers around external systems:
 - AnkiConnect
 - GitHub API
 - Notion API
-- Raindrop.io
-- Telegram queue
-- Stash
-- mobile game script runners
 
 Adapters should be optional, mock-friendly, and replaceable.
 
@@ -74,26 +67,19 @@ Adapters should be optional, mock-friendly, and replaceable.
 - Notion daily pulse upsert by date.
 - CLI quick capture for low-friction manual logging.
 
-### Phase 2: Automation Observability
+### Phase 2: Daily Routine Observability
 
-- Automation registry.
-- Run ledger.
+- Scheduled task registry for LifeQuest-owned routines.
+- Run ledger for Anki and future review/admin routines.
 - API and CLI for manual registration and run logging.
-- Adapters for existing Raindrop, Telegram, Stash, and game script projects.
+- Optional future read-only health checks for external projects if they become relevant to daily review.
 
 ### Phase 3: Knowledge Inbox
 
 - Unified inbox for URLs, notes, AI summaries, and reading items.
 - Notion knowledge sync.
-- Raindrop dead-link checks.
 
-### Phase 4: ACG Media Library
-
-- Scan only whitelisted ACG folders.
-- Dry-run duplicate and organization suggestions.
-- Work-level metadata, not just file-level metadata.
-
-### Phase 5: Frontend / Game Layer
+### Phase 4: Frontend / Review Layer
 
 - Use LifeQuest API as the backend.
-- Add quests, streaks, experience, focus score, and daily review loops.
+- Add weekly review, focus score, and daily review loops.
