@@ -150,6 +150,7 @@ a {
 .section-grid,
 .today-panel,
 .module-grid,
+.quest-list,
 .list-stack,
 .status-columns {
   display: grid;
@@ -354,6 +355,149 @@ a {
   color: var(--green);
 }
 
+.quest-board {
+  background:
+    radial-gradient(circle at 96% 0%, rgba(168, 111, 32, 0.16), transparent 28%),
+    rgba(255, 255, 255, 0.91);
+  margin-top: 16px;
+}
+
+.quest-board-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.quest-score {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--green);
+  min-width: 118px;
+  padding: 10px 12px;
+  text-align: right;
+}
+
+.quest-score span {
+  display: block;
+  font-size: 1.9rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.quest-score small,
+.quest-kicker,
+.quest-progress,
+.quest-action-note {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.quest-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.quest-card {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 230px;
+  padding: 14px;
+}
+
+.quest-card-completed {
+  background: linear-gradient(180deg, rgba(47, 111, 94, 0.14), var(--surface-soft));
+}
+
+.quest-card-skipped {
+  background: linear-gradient(180deg, rgba(55, 111, 159, 0.12), var(--surface-soft));
+}
+
+.quest-top {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.quest-kicker {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.quest-card h3 {
+  font-size: 1.12rem;
+  line-height: 1.25;
+  margin: 8px 0 0;
+}
+
+.quest-card p {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 12px 0;
+}
+
+.quest-status {
+  background: rgba(47, 111, 94, 0.12);
+  border-radius: 8px;
+  color: var(--green);
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  font-weight: 900;
+  padding: 6px 8px;
+}
+
+.quest-card-skipped .quest-status {
+  background: rgba(55, 111, 159, 0.12);
+  color: var(--blue);
+}
+
+.quest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.quest-button {
+  background: var(--green);
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 900;
+  padding: 9px 11px;
+}
+
+.quest-button-secondary {
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.quest-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.quest-gentle-message {
+  background: rgba(47, 111, 94, 0.09);
+  border: 1px solid rgba(47, 111, 94, 0.12);
+  border-radius: 8px;
+  color: var(--green);
+  font-weight: 800;
+  line-height: 1.6;
+  margin-top: 12px;
+  padding: 12px;
+}
+
 .status-columns {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -382,6 +526,10 @@ a {
   .hero-actions {
     grid-template-columns: 1fr;
   }
+
+  .quest-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 680px) {
@@ -401,7 +549,12 @@ a {
   }
 
   .module-grid,
+  .quest-list,
   .status-columns {
     grid-template-columns: 1fr;
+  }
+
+  .quest-board-head {
+    display: grid;
   }
 }
