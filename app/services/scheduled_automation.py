@@ -3,6 +3,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.exceptions import NotFoundError
 from app.models.automation import (
     AutomationCategory,
     AutomationDefinition,
@@ -17,7 +18,7 @@ from app.services.automation import AutomationNotFoundError, AutomationService
 from app.services.learning import LearningService
 
 
-class ScheduledAutomationNotFoundError(ValueError):
+class ScheduledAutomationNotFoundError(NotFoundError):
     pass
 
 

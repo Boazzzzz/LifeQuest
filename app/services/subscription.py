@@ -2,6 +2,7 @@ import calendar
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.activity import ActivityEvent, ActivityEventType
 from app.models.subscription import (
     SubscriptionAttentionItem,
@@ -19,11 +20,11 @@ from app.repositories.activity import ActivityRepository
 from app.repositories.subscription import SubscriptionRepository
 
 
-class SubscriptionNotFoundError(ValueError):
+class SubscriptionNotFoundError(NotFoundError):
     pass
 
 
-class SubscriptionConflictError(ValueError):
+class SubscriptionConflictError(ConflictError):
     pass
 
 

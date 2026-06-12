@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import datetime, timezone
 
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.activity import ActivityEvent, ActivityEventType
 from app.models.automation import (
     AutomationDefinition,
@@ -14,11 +15,11 @@ from app.repositories.activity import ActivityRepository
 from app.repositories.automation import AutomationRepository
 
 
-class AutomationNotFoundError(ValueError):
+class AutomationNotFoundError(NotFoundError):
     pass
 
 
-class AutomationConflictError(ValueError):
+class AutomationConflictError(ConflictError):
     pass
 
 

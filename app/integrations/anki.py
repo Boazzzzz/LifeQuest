@@ -7,12 +7,13 @@ import httpx
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.core.exceptions import ExternalServiceError
 from app.models.anki import AnkiReviewedCard, AnkiReviewedTodayOverview
 
 logger = logging.getLogger(__name__)
 
 
-class AnkiConnectError(RuntimeError):
+class AnkiConnectError(ExternalServiceError):
     pass
 
 

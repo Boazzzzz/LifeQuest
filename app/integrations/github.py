@@ -6,11 +6,12 @@ import httpx
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.core.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
 
 
-class GitHubIntegrationError(RuntimeError):
+class GitHubIntegrationError(ExternalServiceError):
     pass
 
 

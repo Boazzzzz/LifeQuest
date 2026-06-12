@@ -5,6 +5,10 @@
 - Priority: P1
 - Status: Groundwork implemented
 - Problem: schema upgrades are currently embedded in runtime initialization, which makes versioned upgrades harder to reason about as the database evolves.
+- Current groundwork:
+  - SQLite/MSSQL upgrade logic now runs through `app/core/migrations.py`
+  - applied migrations are tracked in `schema_migrations` by revision
+  - tests cover fresh migration recording and legacy SQLite upgrade behavior
 - Scope:
   - introduce a migration tool and baseline revision
   - move SQLite upgrade logic out of `initialize_database`
@@ -69,7 +73,11 @@
 ## Issue 6: Introduce a shared exception hierarchy
 
 - Priority: P2
+- Status: Groundwork started
 - Problem: the codebase already has some custom errors, but they do not share a common base and some modules still raise raw `ValueError`.
+- Current groundwork:
+  - shared base exceptions live in `app/core/exceptions.py`
+  - existing not-found, conflict, external-service, and configuration errors keep their public class names while inheriting shared bases
 - Scope:
   - add shared base exceptions for validation, not-found, conflict, and external-service errors
   - update service and validation layers to raise domain-specific exceptions
@@ -81,7 +89,11 @@
 ## Issue 7: Expand coverage around boundary conditions
 
 - Priority: P3
+- Status: Groundwork started
 - Problem: current tests miss several behavioral edges even though the overall suite is growing.
+- Current groundwork:
+  - `tests/conftest.py` provides temp SQLite database fixtures for cross-cutting tests
+  - migration upgrade-path and shared exception hierarchy coverage lives in `tests/test_core_foundations.py`
 - Scope:
   - add Notion sync retry/conflict tests
   - add subscription leap-year and month-end coverage
