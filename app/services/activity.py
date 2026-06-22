@@ -60,6 +60,31 @@ class ActivityService:
             detail = self._subscription_detail(payload)
             href = "/life-admin/subscriptions"
             tone = "neutral"
+        elif event.event_type == ActivityEventType.money_goal_created:
+            title = "Created money goal"
+            detail = str(payload.get("name") or payload.get("key") or "Money goal")
+            href = "/life-admin/money"
+            tone = "positive"
+        elif event.event_type == ActivityEventType.money_goal_contribution_recorded:
+            title = "Recorded money goal contribution"
+            detail = self._money_amount_detail(payload)
+            href = "/life-admin/money"
+            tone = "positive"
+        elif event.event_type == ActivityEventType.money_weekly_checkin_recorded:
+            title = "Recorded weekly money check-in"
+            detail = f"Free cashflow: {payload.get('currency', 'TWD')} {float(payload.get('free_cashflow') or 0):.2f}"
+            href = "/life-admin/money"
+            tone = "neutral"
+        elif event.event_type == ActivityEventType.money_leverage_plan_created:
+            title = "Created leverage strategy draft"
+            detail = str(payload.get("name") or payload.get("key") or "Leverage strategy")
+            href = "/life-admin/money"
+            tone = "warning"
+        elif event.event_type == ActivityEventType.money_strategy_decision_logged:
+            title = "Logged strategy decision"
+            detail = str(payload.get("decision") or "Decision recorded")
+            href = "/life-admin/money"
+            tone = "neutral"
         elif event.event_type == ActivityEventType.work_knowledge_note_created:
             title = "Captured knowledge note"
             detail = str(payload.get("title") or "Work knowledge note")
@@ -107,3 +132,11 @@ class ActivityService:
         if amount is None or currency is None:
             return name
         return f"{name} · {currency} {float(amount):.2f}"
+
+    def _money_amount_detail(self, payload: dict) -> str:
+        name = str(payload.get("name") or payload.get("key") or "money goal")
+        amount = payload.get("amount")
+        currency = payload.get("currency") or "TWD"
+        if amount is None:
+            return name
+        return f"{name} - {currency} {float(amount):.2f}"

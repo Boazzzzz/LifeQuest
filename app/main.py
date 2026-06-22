@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import activity, automations, dashboard, game, health, integrations, learning, notion, review, subscriptions, ui, work_knowledge
+from app.api.routes import activity, automations, dashboard, game, health, integrations, learning, money, notion, review, subscriptions, ui, work_knowledge
 from app.core.config import settings
 from app.core.database import initialize_database
 from app.core.logging import configure_logging
@@ -25,6 +25,7 @@ app.include_router(game.router)
 app.include_router(health.router)
 app.include_router(integrations.router)
 app.include_router(learning.router)
+app.include_router(money.router)
 app.include_router(notion.router)
 app.include_router(review.router)
 app.include_router(subscriptions.router)

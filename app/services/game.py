@@ -65,6 +65,22 @@ DEFAULT_DAILY_QUESTS = [
         category="review",
         completion_type=GameQuestCompletionType.manual,
     ),
+    GameQuestDefinition(
+        key="money-weekly-review",
+        title="金錢週回顧",
+        description="記錄本週收入、支出、儲蓄與債務壓力，先看清楚再做決策。",
+        xp=15,
+        category="money",
+        completion_type=GameQuestCompletionType.manual,
+    ),
+    GameQuestDefinition(
+        key="leverage-plan-review",
+        title="槓桿策略檢核",
+        description="只獎勵完成紅燈檢查，不獎勵借錢或加大曝險。",
+        xp=10,
+        category="money",
+        completion_type=GameQuestCompletionType.manual,
+    ),
 ]
 
 

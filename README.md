@@ -28,6 +28,7 @@ The core product should stay centered on five areas:
 
 - `Learning`: sessions, Anki, GitHub activity, progress summaries, and review loops.
 - `Life Admin`: subscriptions, recurring costs, small personal admin signals, and later reminders.
+- `Money Quest`: protected savings goals, weekly cashflow check-ins, and leverage strategy guardrails.
 - `Knowledge`: work notes, personal references, and a future inbox/review flow.
 - `Daily Routines`: LifeQuest-owned scheduled tasks such as Anki launch/import and future review reminders.
 - `Dashboard / Review`: a calm daily homepage plus a future weekly review surface.
@@ -49,6 +50,7 @@ Current UI status:
 
 - `GET /` and `GET /dashboard` serve a frontend prototype homepage.
 - `GET /life-admin/subscriptions` serves a live subscription management page for review, create, edit, and lifecycle changes.
+- `GET /life-admin/money` serves the Money Quest finance guardrail page.
 - `GET /japanese` serves a narrower Japanese-focused dashboard.
 - The homepage is intentionally a direction-setting prototype: some sections use fallback content until every backend slice is wired to live data.
 
@@ -83,6 +85,7 @@ Implemented:
 - CLI quick capture through `lifequest`.
 - FastAPI routes for local API testing.
 - Frontend prototype homepage for the full LifeQuest direction, plus a live subscription management page.
+- Money Quest with protected goals, weekly cashflow check-ins, loan scenarios, and leveraged ETF guardrail reviews.
 
 Not implemented yet:
 
@@ -224,6 +227,7 @@ http://127.0.0.1:8000/docs
 http://127.0.0.1:8000/
 http://127.0.0.1:8000/dashboard
 http://127.0.0.1:8000/life-admin/subscriptions
+http://127.0.0.1:8000/life-admin/money
 http://127.0.0.1:8000/japanese
 ```
 
@@ -321,6 +325,13 @@ The app still applies pending migrations automatically on startup, but the CLI g
 - `GET /subscriptions/{subscription_ref}`
 - `PATCH /subscriptions/{subscription_ref}`
 - `GET /subscriptions/overview/monthly`
+- `GET /money/overview`
+- `POST /money/goals`
+- `POST /money/checkins/weekly`
+- `POST /money/loan-scenarios`
+- `POST /money/leverage-plans`
+- `GET /money/leverage-plans/{plan_ref}/review`
+- `POST /money/leverage-plans/{plan_ref}/decision-log`
 
 ## Environment Variables
 
@@ -563,6 +574,22 @@ lifequest subscription list
 lifequest subscription overview --days-ahead 30
 lifequest subscription update chatgpt-plus --recurrence unknown --notes "Primary AI tool"
 ```
+
+## Money Quest
+
+Money Quest is the personal finance guardrail module for LifeQuest. It is not a bank integration, brokerage integration, trading tool, or investment advisor.
+
+Current MVP:
+
+- Track protected goals such as an emergency fund or hair-transplant fund.
+- Record weekly income, expenses, savings, investment contribution, and debt pressure.
+- Create manual loan scenarios for stress testing.
+- Create Taiwan 2x ETF style leverage strategy drafts.
+- Review strategy guardrails before a plan can be marked `reviewed`.
+- Keep decision logs so emotional or FOMO-driven investment ideas leave a trail.
+- Add dashboard attention items and daily RPG quests for review behavior.
+
+See [docs/money_quest.md](docs/money_quest.md) for the route list, default guardrails, and safety boundary.
 
 ## Work Knowledge
 

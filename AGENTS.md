@@ -153,6 +153,7 @@ Useful local routes:
 - `http://127.0.0.1:8000/`
 - `http://127.0.0.1:8000/dashboard`
 - `http://127.0.0.1:8000/life-admin/subscriptions`
+- `http://127.0.0.1:8000/life-admin/money`
 - `http://127.0.0.1:8000/japanese`
 
 ## File Ownership Guidance

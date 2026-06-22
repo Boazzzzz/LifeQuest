@@ -20,6 +20,7 @@ from app.models.subscription import SubscriptionMonthlyOverview
 from app.services.activity import ActivityService
 from app.services.automation import AutomationService
 from app.services.learning import LearningService
+from app.services.money import MoneyService
 from app.services.subscription import SubscriptionService
 from app.services.work_knowledge import WorkKnowledgeService
 
@@ -32,12 +33,14 @@ class DashboardService:
         automation_service: AutomationService | None = None,
         work_knowledge_service: WorkKnowledgeService | None = None,
         activity_service: ActivityService | None = None,
+        money_service: MoneyService | None = None,
     ) -> None:
         self.learning_service = learning_service or LearningService()
         self.subscription_service = subscription_service or SubscriptionService()
         self.automation_service = automation_service or AutomationService()
         self.work_knowledge_service = work_knowledge_service or WorkKnowledgeService()
         self.activity_service = activity_service or ActivityService()
+        self.money_service = money_service or MoneyService()
 
     async def build_overview(self, target_date: date | None = None) -> DashboardOverview:
         target_date = target_date or date.today()
@@ -50,6 +53,7 @@ class DashboardService:
         automation_definitions = self.automation_service.list_definitions()
         recent_runs = self.automation_service.list_recent_runs(limit=5)
         notes = self.work_knowledge_service.list_notes(limit=200)
+        money_overview = self.money_service.build_overview()
 
         automations = self._build_automations_overview(automation_definitions, recent_runs)
         knowledge = self._build_knowledge_overview(notes)
@@ -59,6 +63,7 @@ class DashboardService:
             subscriptions=subscription_overview,
             automations=automations,
             knowledge=knowledge,
+            money_attention=money_overview.attention_items,
         )
         hero = self._build_hero(
             target_date=target_date,
@@ -78,6 +83,7 @@ class DashboardService:
             subscriptions=subscriptions,
             automations=automations,
             knowledge=knowledge,
+            money_overview=money_overview,
         )
         recent_activity = self.activity_service.get_recent_timeline(limit=6).items
 
@@ -237,6 +243,7 @@ class DashboardService:
         subscriptions: SubscriptionMonthlyOverview,
         automations: DashboardAutomationsOverview,
         knowledge: DashboardKnowledgeOverview,
+        money_attention,
     ) -> list[DashboardAttentionItem]:
         items: list[DashboardAttentionItem] = []
 
@@ -300,6 +307,18 @@ class DashboardService:
                 )
             )
 
+        for item in money_attention:
+            items.append(
+                DashboardAttentionItem(
+                    severity=DashboardAttentionSeverity.warning
+                    if item.severity in {"warning", "failed"}
+                    else DashboardAttentionSeverity.info,
+                    title=item.title,
+                    detail=item.detail,
+                    href=item.href,
+                )
+            )
+
         if not items:
             items.append(
                 DashboardAttentionItem(
@@ -317,6 +336,7 @@ class DashboardService:
         subscriptions: DashboardSubscriptionsOverview,
         automations: DashboardAutomationsOverview,
         knowledge: DashboardKnowledgeOverview,
+        money_overview,
     ) -> list[DashboardLaunchpadItem]:
         return [
             DashboardLaunchpadItem(
@@ -334,6 +354,14 @@ class DashboardService:
                 href="/life-admin/subscriptions",
                 metric=f"{subscriptions.overview.active_subscription_count} 筆使用中",
                 status_label=subscriptions.status,
+            ),
+            DashboardLaunchpadItem(
+                key="money",
+                title="Money Quest",
+                summary="Protect goals, review cashflow, and keep leverage plans behind guardrails.",
+                href="/life-admin/money",
+                metric=f"{len(money_overview.leverage_plans)} plans",
+                status_label="attention" if money_overview.attention_items else "steady",
             ),
             DashboardLaunchpadItem(
                 key="automations",

@@ -55,7 +55,7 @@ def test_daily_board_starts_with_gentle_pending_quests(tmp_path, monkeypatch):
     assert board.completed_count == 0
     assert board.skipped_count == 0
     assert board.earned_xp == 0
-    assert board.available_xp == 75
+    assert board.available_xp == 100
     assert quest_by_key(board, "python-focus").status == "pending"
     assert quest_by_key(board, "japanese-review").status == "pending"
     assert "不扣分" in board.gentle_message

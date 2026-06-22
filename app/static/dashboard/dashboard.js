@@ -43,9 +43,9 @@ const fallbackOverview = {
   game: {
     completed_count: 0,
     skipped_count: 0,
-    total_count: 4,
+    total_count: 6,
     earned_xp: 0,
-    available_xp: 75,
+    available_xp: 100,
     gentle_message: "先挑一個最小任務開始。LifeQuest 不扣分，只幫你把路標點亮。",
     quests: [
       {
@@ -87,6 +87,28 @@ const fallbackOverview = {
         description: "看過今天的 LifeQuest 儀表板，知道下一步要做什麼。",
         xp: 10,
         category: "review",
+        completion_type: "manual",
+        status: "pending",
+        progress_label: "手動確認",
+        action_label: "可手動完成",
+      },
+      {
+        key: "money-weekly-review",
+        title: "金錢週回顧",
+        description: "記錄本週收入、支出、儲蓄與債務壓力。",
+        xp: 15,
+        category: "money",
+        completion_type: "manual",
+        status: "pending",
+        progress_label: "手動確認",
+        action_label: "可手動完成",
+      },
+      {
+        key: "leverage-plan-review",
+        title: "槓桿策略檢核",
+        description: "完成紅燈檢查，不獎勵借錢或加大曝險。",
+        xp: 10,
+        category: "money",
         completion_type: "manual",
         status: "pending",
         progress_label: "手動確認",
@@ -164,6 +186,7 @@ function render(data) {
           <a href="/japanese">日文</a>
           <a href="#quests">任務板</a>
           <a href="/life-admin/subscriptions">訂閱</a>
+          <a href="/life-admin/money">財務</a>
           <a href="/review/weekly">週回顧</a>
         </nav>
       </header>
@@ -312,6 +335,13 @@ function buildPrimaryActions(data, pulse) {
       tone: "admin",
     },
     {
+      title: "財務作戰室",
+      detail: "保護植髮基金與緊急預備金，讓槓桿策略先通過紅燈檢核。",
+      href: "/life-admin/money",
+      metric: "Money",
+      tone: "admin",
+    },
+    {
       title: "做週回顧",
       detail: "把學習、訂閱、自動化與知識收束成下週方向。",
       href: "/review/weekly",
@@ -340,6 +370,12 @@ function buildModules(data, pulse, subscriptionOverview) {
       href: "/life-admin/subscriptions",
       detail: "管理訂閱、扣款日、狀態和每月成本。",
       metric: `${subscriptionOverview.active_subscription_count ?? 0} active`,
+    },
+    {
+      title: "Money Quest",
+      href: "/life-admin/money",
+      detail: "用保護目標、現金流與槓桿 ETF 紅燈檢核，讓金錢決策不要被 FOMO 接管。",
+      metric: "guardrails",
     },
     {
       title: "Daily Routines",
@@ -501,6 +537,9 @@ function categoryLabel(category) {
   }
   if (category === "review") {
     return "回顧";
+  }
+  if (category === "money") {
+    return "財務";
   }
   return category || "任務";
 }

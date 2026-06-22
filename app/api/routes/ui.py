@@ -12,6 +12,7 @@ _JAPANESE_INDEX = _STATIC_ROOT / "japanese" / "index.html"
 _NIGHTLY_INDEX = _STATIC_ROOT / "nightly" / "index.html"
 _WEEKLY_REVIEW_INDEX = _STATIC_ROOT / "weekly-review" / "index.html"
 _SUBSCRIPTIONS_INDEX = _STATIC_ROOT / "subscriptions" / "index.html"
+_MONEY_INDEX = _STATIC_ROOT / "money" / "index.html"
 
 
 @router.get("/", include_in_schema=False)
@@ -27,6 +28,11 @@ def lifequest_dashboard_page() -> FileResponse:
 @router.get("/life-admin/subscriptions", include_in_schema=False)
 def lifequest_subscriptions_page() -> FileResponse:
     return FileResponse(_SUBSCRIPTIONS_INDEX)
+
+
+@router.get("/life-admin/money", include_in_schema=False)
+def lifequest_money_page() -> FileResponse:
+    return FileResponse(_MONEY_INDEX)
 
 
 @router.get("/japanese", include_in_schema=False)

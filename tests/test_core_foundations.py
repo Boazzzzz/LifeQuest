@@ -10,6 +10,7 @@ from app.core.exceptions import (
 from app.integrations.anki import AnkiConnectError
 from app.integrations.github import GitHubIntegrationError
 from app.services.automation import AutomationConflictError, AutomationNotFoundError
+from app.services.money import MoneyConflictError, MoneyNotFoundError
 from app.services.scheduled_automation import ScheduledAutomationNotFoundError
 from app.services.subscription import SubscriptionConflictError, SubscriptionNotFoundError
 from app.services.work_knowledge import WorkKnowledgeNotFoundError
@@ -26,6 +27,7 @@ def test_initialize_database_records_sqlite_migrations(temp_database):
         "0001_initial_schema",
         "0002_anki_snapshot_columns",
         "0003_subscription_schema",
+        "0004_money_schema",
     }
 
 
@@ -103,8 +105,10 @@ def test_domain_exceptions_share_common_base_classes():
     assert issubclass(SubscriptionNotFoundError, NotFoundError)
     assert issubclass(WorkKnowledgeNotFoundError, NotFoundError)
     assert issubclass(ScheduledAutomationNotFoundError, NotFoundError)
+    assert issubclass(MoneyNotFoundError, NotFoundError)
     assert issubclass(AutomationConflictError, ConflictError)
     assert issubclass(SubscriptionConflictError, ConflictError)
+    assert issubclass(MoneyConflictError, ConflictError)
     assert issubclass(AnkiConnectError, ExternalServiceError)
     assert issubclass(GitHubIntegrationError, ExternalServiceError)
     assert issubclass(ConfigurationError, RuntimeError)
