@@ -119,6 +119,14 @@ Layout rules:
 
 Codex should prefer repository-native commands that are already documented or already work in this project.
 
+Command environment preference:
+
+- Prefer Linux/Ubuntu/WSL commands for day-to-day development, inspection, tests, and app startup.
+- In this Windows checkout, the WSL repo path is `/mnt/f/Documents/projects/LifeQuest`.
+- Avoid PowerShell for normal project work when WSL/Linux is available.
+- Use PowerShell only for Windows-only integration points, such as Task Scheduler registration, existing `.ps1` runtime scripts, or when WSL/Linux access is blocked and the user approves the fallback.
+- When using WSL against the Windows-mounted checkout, keep Git configured to avoid CRLF status noise; this checkout uses local `core.autocrlf=true`.
+
 Environment setup:
 
 - Create a venv when needed: `python -m venv .venv`
